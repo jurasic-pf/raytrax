@@ -122,4 +122,4 @@ def solve(
         max_step=0.005,
         first_step=0.005,
     )
-    return [_y_to_state(y=y, s=t) for t, y in zip(res.t, res.y.T)]
+    return [_y_to_state(y=jnp.asarray(y), s=t) for t, y in zip(res.t, res.y.T)]
