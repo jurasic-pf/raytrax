@@ -18,7 +18,10 @@ def jv_jax(v, z):
     shape = jnp.shape(z)
     dtype = jnp.float64
     return jax.pure_callback(
-        lambda z, v=v: scipy_jv(v, z), jax.ShapeDtypeStruct(shape=shape, dtype=dtype), z
+        lambda z, v=v: scipy_jv(v, z),
+        jax.ShapeDtypeStruct(shape=shape, dtype=dtype),
+        z,
+        vmap_method="sequential",
     )
 
 
@@ -53,6 +56,7 @@ def kv_jax(v, z):
         lambda z: scipy_kv_v(z),
         jax.ShapeDtypeStruct(shape=shape, dtype=dtype),
         z,
+        vmap_method="sequential",
     )
 
 
