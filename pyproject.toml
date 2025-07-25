@@ -11,6 +11,7 @@ dependencies = [
   "numpy",
   "scipy",
   "interpax",
+  "beartype",
 ]
 requires-python = ">=3.10"
 authors = [

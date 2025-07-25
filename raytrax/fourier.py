@@ -1,26 +1,28 @@
 from enum import Enum
 from functools import partial
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 import interpax
 import jax
 import jax.numpy as jnp
 import jaxtyping as jt
 import numpy as np
+from beartype import beartype as typechecker
 from scipy.interpolate import griddata
 
 
+@runtime_checkable
 class WoutLike(Protocol):
     """Protocol for objects that can be used as VmecWOut."""
 
-    rmnc: jt.Float[np.ndarray, "n_rhourfaces n_fourier_coefficients"]
-    zmns: jt.Float[np.ndarray, "n_rhourfaces n_fourier_coefficients"]
-    xm: jt.Int[np.ndarray, "n_fourier_coefficients"]
-    xn: jt.Int[np.ndarray, "n_fourier_coefficients"]
-    bsupumnc: jt.Float[np.ndarray, "n_rhourfaces n_fourier_coefficients_nyquist"]
-    bsupvmnc: jt.Float[np.ndarray, "n_rhourfaces n_fourier_coefficients_nyquist"]
-    xm_nyq: jt.Int[np.ndarray, "n_fourier_coefficients_nyquist"]
-    xn_nyq: jt.Int[np.ndarray, "n_fourier_coefficients_nyquist"]
+    rmnc: jt.Float[jax.Array, "n_surfaces n_fourier_coefficients"]
+    zmns: jt.Float[jax.Array, "n_surfaces n_fourier_coefficients"]
+    xm: jt.Int[jax.Array, "n_fourier_coefficients"]
+    xn: jt.Int[jax.Array, "n_fourier_coefficients"]
+    bsupumnc: jt.Float[jax.Array, "n_surfaces n_fourier_coefficients_nyquist"]
+    bsupvmnc: jt.Float[jax.Array, "n_surfaces n_fourier_coefficients_nyquist"]
+    xm_nyq: jt.Int[jax.Array, "n_fourier_coefficients_nyquist"]
+    xn_nyq: jt.Int[jax.Array, "n_fourier_coefficients_nyquist"]
     ns: int
     lasym: bool
 
@@ -37,6 +39,7 @@ class FourierDerivative(Enum):
 
 
 @partial(jax.jit, static_argnames=["basis", "derivative"])
+@jt.jaxtyped(typechecker=typechecker)
 def inverse_fourier_transform(
     fourier_coefficients: jt.Float[jax.Array, "n_rho n_fourier_coefficients"],
     poloidal_mode_numbers: jt.Int[jax.Array, " n_fourier_coefficients"],
@@ -46,42 +49,44 @@ def inverse_fourier_transform(
     derivative: FourierDerivative = FourierDerivative.NO,
 ) -> jt.Float[jax.Array, "n_rho n_theta n_phi"]:
     """Transform an array of Fourier coefficients into values on a toroidal grid."""
-    m = poloidal_mode_numbers[:, jnp.newaxis, jnp.newaxis, jnp.newaxis]
-    n = toroidal_mode_numbers[:, jnp.newaxis, jnp.newaxis, jnp.newaxis]
-    theta = rho_theta_phi[jnp.newaxis, :, :, :, 1]
-    phi = rho_theta_phi[jnp.newaxis, :, :, :, 2]
+    m = poloidal_mode_numbers[jnp.newaxis, :, jnp.newaxis, jnp.newaxis]
+    n = toroidal_mode_numbers[jnp.newaxis, :, jnp.newaxis, jnp.newaxis]
+    theta = rho_theta_phi[:, jnp.newaxis, :, :, 1]
+    phi = rho_theta_phi[:, jnp.newaxis, :, :, 2]
     angle = m * theta - n * phi
     coefficients = fourier_coefficients[:, :, jnp.newaxis, jnp.newaxis]
     if basis == FourierBasis.COS:
         if derivative == FourierDerivative.POLOIDAL:
-            return jnp.sum(-m * coefficients * jnp.sin(angle), axis=0)
+            return jnp.sum(-m * coefficients * jnp.sin(angle), axis=1)
         elif derivative == FourierDerivative.TOROIDAL:
-            return jnp.sum(n * coefficients * jnp.sin(angle), axis=0)
+            return jnp.sum(n * coefficients * jnp.sin(angle), axis=1)
         else:
-            return jnp.sum(coefficients * jnp.cos(angle), axis=0)
+            return jnp.sum(coefficients * jnp.cos(angle), axis=1)
     elif basis == FourierBasis.SIN:
         if derivative == FourierDerivative.POLOIDAL:
-            return jnp.sum(m * coefficients * jnp.cos(angle), axis=0)
+            return jnp.sum(m * coefficients * jnp.cos(angle), axis=1)
         elif derivative == FourierDerivative.TOROIDAL:
-            return jnp.sum(-n * coefficients * jnp.cos(angle), axis=0)
+            return jnp.sum(-n * coefficients * jnp.cos(angle), axis=1)
         else:
-            return jnp.sum(coefficients * jnp.sin(angle), axis=0)
+            return jnp.sum(coefficients * jnp.sin(angle), axis=1)
 
 
+@jt.jaxtyped(typechecker=typechecker)
 def interpolate_coefficients_radially(
-    fourier_coefficients: jt.Float[np.ndarray, "n_rho n_fourier_coefficients"],
-    normalized_toroidal_flux_in: jt.Float[np.ndarray, " n_rho "],
-    normalized_effective_radius_out: jt.Float[np.ndarray, " n_rho "],
-) -> jt.Float[np.ndarray, "n_rho n_theta n_phi"]:
+    fourier_coefficients: jt.Float[jax.Array, "n_s n_fourier_coefficients"],
+    normalized_toroidal_flux_in: jt.Float[jax.Array, " n_s "],
+    normalized_effective_radius_out: jt.Float[jax.Array, " n_rho "],
+) -> jt.Float[jax.Array, "n_rho n_fourier_coefficients"]:
     """Interpolate Fourier radially at the effective radius values provided."""
     return interpax.interp1d(
         normalized_effective_radius_out,
         jnp.sqrt(normalized_toroidal_flux_in),
-        fourier_coefficients.T,
+        fourier_coefficients,
         extrap=True,
-    ).T
+    )
 
 
+@jt.jaxtyped(typechecker=typechecker)
 def evaluate_rphiz_on_toroidal_grid(
     equilibrium: WoutLike,
     rho_theta_phi: jt.Float[jax.Array, "n_rho n_theta n_phi sthetaphi=3"],
@@ -119,6 +124,7 @@ def evaluate_rphiz_on_toroidal_grid(
     return jnp.stack([r, phi, z], axis=-1)
 
 
+@jt.jaxtyped(typechecker=typechecker)
 def evaluate_magnetic_field_on_toroidal_grid(
     equilibrium: WoutLike,
     rho_theta_phi: jt.Float[jax.Array, "n_rho n_theta n_phi sthetaphi=3"],
@@ -230,11 +236,12 @@ def evaluate_magnetic_field_on_toroidal_grid(
     return b_theta[..., jnp.newaxis] * dxyz_dtheta + b_phi[..., jnp.newaxis] * dxyz_dphi
 
 
+@jt.jaxtyped(typechecker=typechecker)
 def interpolate_toroidal_to_cylindrical_grid(
-    rphiz_toroidal: jt.Float[np.ndarray, "n_rho n_theta n_phi rphiz=3"],
-    rz_cylindrical: jt.Float[np.ndarray, "n_r n_z rz=2"],
-    value_toroidal: jt.Float[np.ndarray, "n_rho n_theta n_phi"],
-) -> jt.Float[np.ndarray, "n_r n_phi n_z rhothetaphi=3"]:
+    rphiz_toroidal: jt.Float[jax.Array, "n_rho n_theta n_phi rphiz=3"],
+    rz_cylindrical: jt.Float[jax.Array, "n_r n_z rz=2"],
+    value_toroidal: jt.Float[jax.Array, "n_rho n_theta n_phi"],
+) -> jt.Float[jax.Array, "n_r n_phi n_z rhothetaphi=3"]:
     """Interpolate toroidal coordinates to a cylindrical grid."""
     (n_r, n_z, _) = rz_cylindrical.shape
     values = []

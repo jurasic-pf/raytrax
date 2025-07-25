@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -9,17 +10,19 @@ from raytrax.fourier import (
     evaluate_rphiz_on_toroidal_grid,
 )
 
+jax.config.update("jax_enable_x64", True)
+
 
 @dataclass
 class TestWout:
-    rmnc: np.ndarray
-    zmns: np.ndarray
-    xm: np.ndarray
-    xn: np.ndarray
-    bsupumnc: np.ndarray
-    bsupvmnc: np.ndarray
-    xm_nyq: np.ndarray
-    xn_nyq: np.ndarray
+    rmnc: jax.Array
+    zmns: jax.Array
+    xm: jax.Array
+    xn: jax.Array
+    bsupumnc: jax.Array
+    bsupvmnc: jax.Array
+    xm_nyq: jax.Array
+    xn_nyq: jax.Array
     ns: int
     lasym: bool = False
 
@@ -30,29 +33,29 @@ def torus_wout():
     n_surfaces = 5
     major_radius = 2.0
     minor_radius = 0.5
-    rmnc = np.zeros((2, n_surfaces))
-    rmnc[0] = major_radius
-    rmnc[1] = np.sqrt(np.linspace(0, 1, n_surfaces)) * minor_radius
+    rmnc = np.zeros((n_surfaces, 2))
+    rmnc[:, 0] = major_radius
+    rmnc[:, 1] = np.sqrt(np.linspace(0, 1, n_surfaces)) * minor_radius
 
     xm = np.array([0, 1])
     xn = np.array([0, 0])
-    zmns = np.zeros((2, n_surfaces))
-    zmns[1] = np.sqrt(np.linspace(0, 1, n_surfaces)) * minor_radius
+    zmns = np.zeros((n_surfaces, 2))
+    zmns[:, 1] = np.sqrt(np.linspace(0, 1, n_surfaces)) * minor_radius
 
     xm_nyq = np.array([0, 1])
     xn_nyq = np.array([0, 0])
-    bsupumnc = np.zeros((2, n_surfaces - 1))
-    bsupvmnc = np.zeros((2, n_surfaces - 1))
-    bsupvmnc[0] = 0.7
+    bsupumnc = np.zeros((n_surfaces - 1, 2))
+    bsupvmnc = np.zeros(( n_surfaces - 1, 2))
+    bsupvmnc[:, 0] = 0.7
     return TestWout(
-        rmnc=rmnc,
-        zmns=zmns,
-        xm=xm,
-        xn=xn,
-        bsupumnc=bsupumnc,
-        bsupvmnc=bsupvmnc,
-        xm_nyq=xm_nyq,
-        xn_nyq=xn_nyq,
+        rmnc=jnp.array(rmnc),
+        zmns=jnp.array(zmns),
+        xm=jnp.array(xm),
+        xn=jnp.array(xn),
+        bsupumnc=jnp.array(bsupumnc),
+        bsupvmnc=jnp.array(bsupvmnc),
+        xm_nyq=jnp.array(xm_nyq),
+        xn_nyq=jnp.array(xn_nyq),
         ns=5,
         lasym=False,
     )
