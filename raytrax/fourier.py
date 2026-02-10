@@ -75,7 +75,7 @@ def evaluate_rphiz_on_toroidal_grid(
     rho_theta_phi: jt.Float[jax.Array, "n_rho n_theta n_phi sthetaphi=3"],
 ) -> jt.Float[jax.Array, "n_rho n_theta n_phi rphiz=3"]:
     """Evaluate the cylindrical coordinates (r, phi, z) on a toroidal grid.
-    
+
     For rho > 1, the flux surface shape is linearly extrapolated outward to extend
     the physical domain beyond the LCMS.
     """
@@ -85,11 +85,11 @@ def evaluate_rphiz_on_toroidal_grid(
         )
     s = jnp.linspace(0, 1, equilibrium.ns)
     rho = rho_theta_phi[:, 0, 0, 0]
-    
+
     # For rho <= 1: evaluate normally
     # For rho > 1: evaluate at rho=1 and extrapolate linearly outward
     rho_eval = jnp.clip(rho, 0.0, 1.0)
-    
+
     r_at_boundary = inverse_fourier_transform(
         fourier_coefficients=interpolate_coefficients_radially(
             fourier_coefficients=jnp.asarray(equilibrium.rmnc),
@@ -112,7 +112,7 @@ def evaluate_rphiz_on_toroidal_grid(
         rho_theta_phi=rho_theta_phi,
         basis=FourierBasis.SIN,
     )
-    
+
     # For rho > 1, extrapolate by expanding radially from magnetic axis
     # Get magnetic axis position (R0, Z0) - evaluate at rho=0 for first radial point
     rho_axis = jnp.zeros_like(rho_eval)  # All zeros to evaluate at axis
@@ -138,13 +138,15 @@ def evaluate_rphiz_on_toroidal_grid(
         rho_theta_phi=rho_theta_phi,
         basis=FourierBasis.SIN,
     )
-    
+
     # Linear extrapolation: for rho > 1, expand the LCMS surface radially from axis
     # r(rho) = r_axis + rho * (r_boundary - r_axis) where r_boundary is at rho_eval=1
-    extrapolation_factor = rho[:, jnp.newaxis, jnp.newaxis] / jnp.clip(rho_eval[:, jnp.newaxis, jnp.newaxis], 1e-10, None)
+    extrapolation_factor = rho[:, jnp.newaxis, jnp.newaxis] / jnp.clip(
+        rho_eval[:, jnp.newaxis, jnp.newaxis], 1e-10, None
+    )
     r = r_axis + extrapolation_factor * (r_at_boundary - r_axis)
     z = z_axis + extrapolation_factor * (z_at_boundary - z_axis)
-    
+
     phi = rho_theta_phi[:, :, :, 2]
     return jnp.stack([r, phi, z], axis=-1)
 
@@ -155,7 +157,7 @@ def evaluate_magnetic_field_on_toroidal_grid(
     rho_theta_phi: jt.Float[jax.Array, "n_rho n_theta n_phi sthetaphi=3"],
 ) -> jt.Float[jax.Array, "n_rho n_theta n_phi bxyz=3"]:
     """Evaluate the cartesian components of the magnetic field on a toroidal grid.
-    
+
     For rho > 1, the magnetic field is extrapolated by holding it constant at the
     rho=1 value to provide smooth behavior at the plasma boundary.
     """
@@ -167,10 +169,10 @@ def evaluate_magnetic_field_on_toroidal_grid(
     s_half = jnp.linspace(ds / 2, 1 - ds / 2, equilibrium.ns - 1)
     s_full = jnp.linspace(0, 1, equilibrium.ns)
     rho = rho_theta_phi[:, 0, 0, 0]
-    
+
     # Clamp rho to [0, 1] for Fourier evaluation (will extrapolate for rho > 1 later)
     rho_clamped = jnp.clip(rho, 0.0, 1.0)
-    
+
     b_theta = inverse_fourier_transform(
         fourier_coefficients=interpolate_coefficients_radially(
             fourier_coefficients=jnp.asarray(equilibrium.bsupumnc[:, 1:]),
@@ -270,9 +272,11 @@ def evaluate_magnetic_field_on_toroidal_grid(
 
 
 @jt.jaxtyped(typechecker=typechecker)
-def dvolume_drho(equilibrium: WoutLike, rho: jt.Float[jax.Array, "n_rho"]) -> jt.Float[jax.Array, "n_rho"]:
+def dvolume_drho(
+    equilibrium: WoutLike, rho: jt.Float[jax.Array, "n_rho"]
+) -> jt.Float[jax.Array, "n_rho"]:
     """Compute the derivative of the volume with respect to the effective radius."""
-    s_full = jnp.linspace(0, 1, equilibrium.ns)    
+    s_full = jnp.linspace(0, 1, equilibrium.ns)
     g00_coefficients = jnp.asarray(equilibrium.gmnc)[0:1, :]  # Shape: (1, ns)
     g00_interpolated = interpolate_coefficients_radially(
         fourier_coefficients=g00_coefficients,
@@ -280,4 +284,4 @@ def dvolume_drho(equilibrium: WoutLike, rho: jt.Float[jax.Array, "n_rho"]) -> jt
         normalized_effective_radius_out=rho,
     )
     g00 = g00_interpolated[0, :]
-    return (2 * jnp.pi)**2 * jnp.abs(g00)
+    return (2 * jnp.pi) ** 2 * jnp.abs(g00)

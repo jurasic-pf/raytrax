@@ -87,4 +87,6 @@ def test_kve_jax_derivative(v):
 
     # Check only for the inner points with relatively loose tolerance
     # Higher order Bessel functions have steeper derivatives near small z, so need higher atol
-    np.testing.assert_allclose(derivative[1:-1], expected_derivative, rtol=1e-3, atol=5e2)
+    np.testing.assert_allclose(
+        derivative[1:-1], expected_derivative, rtol=1e-3, atol=5e2
+    )

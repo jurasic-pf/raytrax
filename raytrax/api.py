@@ -84,9 +84,12 @@ def trace(
             build_electron_density_profile_interpolator(radial_profiles),
             build_electron_temperature_profile_interpolator(radial_profiles),
         )
-    magnetic_field_interpolator, rho_interpolator, \
-        electron_density_profile_interpolator, electron_temperature_profile_interpolator \
-        = _interpolator_cache[cache_key]
+    (
+        magnetic_field_interpolator,
+        rho_interpolator,
+        electron_density_profile_interpolator,
+        electron_temperature_profile_interpolator,
+    ) = _interpolator_cache[cache_key]
     # Solve ray tracing equations with augmented state vector
     # This computes all quantities (magnetic field, density, temperature, absorption, power)
     # in a single pass during ODE integration, avoiding expensive post-processing

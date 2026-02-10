@@ -48,12 +48,12 @@ def torus_wout():
     bsupumnc = np.zeros((2, n_surfaces))
     bsupvmnc = np.zeros((2, n_surfaces))
     bsupvmnc[0] = 0.7
-    
+
     # Add gmnc and gmns arrays for volume calculations
     gmnc = np.zeros((2, n_surfaces))
     gmnc[0] = np.linspace(0.1, 1.0, n_surfaces)  # g_{0,0} mode varies radially
     gmns = np.zeros((2, n_surfaces))
-    
+
     return TestWout(
         rmnc=jnp.array(rmnc),
         zmns=jnp.array(zmns),

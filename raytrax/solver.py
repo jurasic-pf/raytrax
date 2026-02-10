@@ -319,10 +319,7 @@ def solve(
     )
 
     # Extract ray states from the 7-component ODE solution
-    ray_states = [
-        _y_to_state(y=jnp.asarray(y), s=t)
-        for t, y in zip(res.t, res.y.T)
-    ]
+    ray_states = [_y_to_state(y=jnp.asarray(y), s=t) for t, y in zip(res.t, res.y.T)]
 
     # Vectorised post-processing: evaluate all diagnostics in one vmap call
     positions = jnp.stack([s.position for s in ray_states])

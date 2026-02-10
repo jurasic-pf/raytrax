@@ -13,9 +13,7 @@ def hamiltonian(
     magnetic_field_interpolator: Callable[
         [Float[jax.Array, "3"]], Float[jax.Array, "3"]
     ],
-    rho_interpolator: Callable[
-        [Float[jax.Array, "3"]], Float[jax.Array, ""]
-    ],
+    rho_interpolator: Callable[[Float[jax.Array, "3"]], Float[jax.Array, ""]],
     electron_density_profile_interpolator: Callable[
         [Float[jax.Array, ""]], Float[jax.Array, ""]
     ],
@@ -50,9 +48,7 @@ def hamiltonian_gradients(
     magnetic_field_interpolator: Callable[
         [Float[jax.Array, "3"]], Float[jax.Array, "3"]
     ],
-    rho_interpolator: Callable[
-        [Float[jax.Array, "3"]], Float[jax.Array, ""]
-    ],
+    rho_interpolator: Callable[[Float[jax.Array, "3"]], Float[jax.Array, ""]],
     electron_density_profile_interpolator: Callable[
         [Float[jax.Array, ""]], Float[jax.Array, ""]
     ],

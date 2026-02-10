@@ -71,8 +71,8 @@ def test_trace_w7x_beam(w7x_wout):
 
     rho = np.linspace(0, 1, 45)
     quadratic_profile = (1 - rho) ** 2
-    electron_temperature = 5 * quadratic_profile # 5 keV on axis
-    electron_density = 0.75 * quadratic_profile # 0.75e20/m³ on axis
+    electron_temperature = 5 * quadratic_profile  # 5 keV on axis
+    electron_density = 0.75 * quadratic_profile  # 0.75e20/m³ on axis
     radial_profiles = RadialProfiles(
         rho=rho,
         electron_density=electron_density,

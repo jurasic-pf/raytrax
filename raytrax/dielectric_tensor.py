@@ -122,13 +122,11 @@ def weakly_relativistic_dielectric_tensor(
             Q_h1_s = (Fq_s[q] - Fq_s[q + 1]) * n_par
             Q_h1_minus_s = (Fq_minus_s[q] - Fq_minus_s[q + 1]) * n_par
             Q_h2_s = (
-                Fq_s[q + 1] / mu
-                + (Fq_s[q + 2] + Fq_s[q] - 2 * Fq_s[q + 1]) * n_par**2
+                Fq_s[q + 1] / mu + (Fq_s[q + 2] + Fq_s[q] - 2 * Fq_s[q + 1]) * n_par**2
             )
             Q_h2_minus_s = (
                 Fq_minus_s[q + 1] / mu
-                + (Fq_minus_s[q + 2] + Fq_minus_s[q] - 2 * Fq_minus_s[q + 1])
-                * n_par**2
+                + (Fq_minus_s[q + 2] + Fq_minus_s[q] - 2 * Fq_minus_s[q + 1]) * n_par**2
             )
             D = D.at[0, 0].add(s**2 * a_sk_lam * (Q_h0_s + Q_h0_minus_s))
             # sign error in Travis?
@@ -169,9 +167,7 @@ def a_shkarofsky(n, k):
     """
     sign = (-1) ** k
     numerator = gamma(k + n + 0.5)
-    denominator = (
-        gamma(k + 1) * gamma(n + k / 2 + 1) * gamma(k / 2 + n + 0.5) * (2**n)
-    )
+    denominator = gamma(k + 1) * gamma(n + k / 2 + 1) * gamma(k / 2 + n + 0.5) * (2**n)
     return sign * numerator / denominator
 
 

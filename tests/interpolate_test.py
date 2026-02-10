@@ -57,14 +57,18 @@ def test_map_to_fundamental_domain():
     assert in_2nd
 
     # Test phi beyond one full period: phi=period+0.3 → same as 0.3 (first half)
-    phi_mapped, z_q, in_2nd = _map_to_fundamental_domain(jnp.array(period + 0.3), z, nfp)
+    phi_mapped, z_q, in_2nd = _map_to_fundamental_domain(
+        jnp.array(period + 0.3), z, nfp
+    )
     assert jnp.allclose(phi_mapped, 0.3, atol=1e-10)
     assert jnp.allclose(z_q, z)
     assert not in_2nd
 
     # Test phi in second half (0.75*period): reflects, z negated
     phi_second_half = 0.75 * period
-    phi_mapped, z_q, in_2nd = _map_to_fundamental_domain(jnp.array(phi_second_half), z, nfp)
+    phi_mapped, z_q, in_2nd = _map_to_fundamental_domain(
+        jnp.array(phi_second_half), z, nfp
+    )
     assert jnp.allclose(phi_mapped, period - phi_second_half, atol=1e-10)
     assert jnp.allclose(z_q, -z)
     assert in_2nd
@@ -444,17 +448,20 @@ def test_stellarator_symmetry_in_interpolators(w7x_wout):
 def test_extrapolation_in_cylindrical_grid(w7x_wout):
     """Test that the cylindrical grid properly handles extrapolation beyond LCMS."""
     from raytrax.api import get_interpolator_for_equilibrium
-    from raytrax.interpolate import build_magnetic_field_interpolator, build_rho_interpolator
-    
+    from raytrax.interpolate import (
+        build_magnetic_field_interpolator,
+        build_rho_interpolator,
+    )
+
     interpolator = get_interpolator_for_equilibrium(w7x_wout)
     B_interpolator = build_magnetic_field_interpolator(interpolator)
     rho_interpolator = build_rho_interpolator(interpolator)
-    
+
     # Test position near the plasma boundary at larger major radius
     R_test = 6.0  # Near outboard edge
     phi_test = 0.0  # At symmetry plane
-    Z_test = 0.0   # Midplane
-    
+    Z_test = 0.0  # Midplane
+
     # Create a radial scan from inside to outside plasma
     positions = []
     for delta_r in jnp.linspace(-0.3, 0.3, 20):  # Scan outward through boundary
@@ -462,7 +469,7 @@ def test_extrapolation_in_cylindrical_grid(w7x_wout):
         X = R * jnp.cos(phi_test)
         Y = R * jnp.sin(phi_test)
         positions.append(jnp.array([X, Y, Z_test]))
-    
+
     # Evaluate B field and rho at all positions
     B_magnitudes = []
     rho_values = []
@@ -472,23 +479,25 @@ def test_extrapolation_in_cylindrical_grid(w7x_wout):
         rho_val = float(rho_interpolator(pos))
         B_magnitudes.append(B_mag)
         rho_values.append(rho_val)
-    
+
     B_magnitudes = jnp.array(B_magnitudes)
     rho_values = jnp.array(rho_values)
-    
+
     # Check that we have finite values everywhere (key test for extrapolation)
     assert jnp.all(jnp.isfinite(B_magnitudes)), "B field should be finite everywhere"
     assert jnp.all(jnp.isfinite(rho_values)), "rho should be finite everywhere"
-    
+
     # Focus on points where B > 0 (within or near the grid)
     valid_mask = B_magnitudes > 0.1  # Filter out far-outside points
     B_valid = B_magnitudes[valid_mask]
-    
+
     assert len(B_valid) > 10, "Should have enough valid points for testing"
-    
+
     # Check for reasonable continuity: B field shouldn't have huge jumps
     # This is the key test - without proper extrapolation, we'd see jumps to zero
     dB = jnp.diff(B_valid)
     max_jump = jnp.max(jnp.abs(dB))
     # Allow at most ~1.0T change between adjacent points (reasonable for ~3cm spacing)
-    assert max_jump < 1.0, f"B field has too large jump: {max_jump:.3f} T (indicates bad extrapolation)"
+    assert (
+        max_jump < 1.0
+    ), f"B field has too large jump: {max_jump:.3f} T (indicates bad extrapolation)"

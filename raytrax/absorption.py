@@ -149,15 +149,15 @@ def absorption_coefficient(
     # Absorption coefficient from Fidone et al., Phys. Fluids 1988:
     #   alpha = (omega/(8*pi)) * Xp * I / |S|
     # where S is the Poynting flux and I is the resonance integral.
-    # 
-    # We use the power flux F = 0.5 * dH/dN instead of the full Poynting flux  
+    #
+    # We use the power flux F = 0.5 * dH/dN instead of the full Poynting flux
     # S = (c/(16*pi)) * dH/dN, giving a factor of (c/(8*pi)) difference:
     #   alpha = omega*Xp/c * I / |F|
-    # 
-    # After accounting for Maxwellian distribution normalization, where the 
+    #
+    # After accounting for Maxwellian distribution normalization, where the
     # resonance integral I includes a factor of sqrt(2*pi/mu):
     #   alpha = -omega*Xp*sqrt(mu/(2*pi))/c * resonance_integral / |F|
-    # 
+    #
     # The resonance_integral < 0 for absorption, giving alpha > 0.
     from scipy.constants import c as speed_of_light
 
@@ -170,7 +170,9 @@ def absorption_coefficient(
     power_flux_magnitude = jnp.linalg.norm(power_flux_vector)
     power_flux_threshold = 1e-10
     # Check for both small magnitude and NaN/Inf
-    is_valid = (power_flux_magnitude >= power_flux_threshold) & jnp.isfinite(power_flux_magnitude)
+    is_valid = (power_flux_magnitude >= power_flux_threshold) & jnp.isfinite(
+        power_flux_magnitude
+    )
     return jax.lax.cond(
         is_valid,
         lambda: prefactor * resonance_integral / power_flux_magnitude,
@@ -371,7 +373,9 @@ def quasilinear_diffusion_coefficient(
     # Safety check for small kperp_rho to avoid division by zero
     # For small x, Jn(x)/x = (x/2)^(n-1) / (2 * n!) for n >= 1
     kperp_rho_threshold = 1e-10
-    kperp_rho_safe = jnp.where(kperp_rho < kperp_rho_threshold, kperp_rho_threshold, kperp_rho)
+    kperp_rho_safe = jnp.where(
+        kperp_rho < kperp_rho_threshold, kperp_rho_threshold, kperp_rho
+    )
 
     Jn = bessel.jv_jax(harmonic_index, kperp_rho_safe)
     dJn = bessel.djv_jax(harmonic_index, kperp_rho_safe)
@@ -379,7 +383,9 @@ def quasilinear_diffusion_coefficient(
     An1 = harmonic_index * Jn / kperp_rho_safe
     An2 = 1j * dJn
     # Avoid division by zero when perpendicular_momentum is very small
-    perp_safe = jnp.where(perpendicular_momentum < kperp_rho_threshold, 1.0, perpendicular_momentum)
+    perp_safe = jnp.where(
+        perpendicular_momentum < kperp_rho_threshold, 1.0, perpendicular_momentum
+    )
     An3 = (parallel_momentum / perp_safe) * Jn
     An3 = jnp.where(perpendicular_momentum < kperp_rho_threshold, 0.0, An3)
 

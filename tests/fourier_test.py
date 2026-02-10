@@ -10,7 +10,6 @@ from raytrax.fourier import (
 from .fixtures import torus_wout, w7x_wout
 
 
-
 def test_evaluate_rphiz_on_toroidal_grid(torus_wout):
     """Test the evaluate_rphiz_on_toroidal_grid function."""
     rho_theta_phi = jnp.stack(
@@ -75,18 +74,18 @@ def test_dvolume_drho_torus(torus_wout):
     """Test the dvolume_drho function with a simple torus equilibrium."""
     # Test with various rho values
     rho = jnp.array([0.1, 0.3, 0.5, 0.7, 0.9])
-    
+
     dv_drho = dvolume_drho(torus_wout, rho)
-    
+
     # Check shape and basic properties
     assert dv_drho.shape == rho.shape
     assert jnp.all(jnp.isfinite(dv_drho))
     assert jnp.all(dv_drho > 0)  # Volume derivative should be positive
-    
+
     # For our test fixture, g_{0,0} varies linearly from 0.1 to 1.0
     # so the interpolated values should be reasonable
-    expected_min = (2 * jnp.pi)**2 * 0.1
-    expected_max = (2 * jnp.pi)**2 * 1.0
+    expected_min = (2 * jnp.pi) ** 2 * 0.1
+    expected_max = (2 * jnp.pi) ** 2 * 1.0
     assert jnp.all(dv_drho >= expected_min * 0.9)  # Allow some tolerance
     assert jnp.all(dv_drho <= expected_max * 1.1)
 
@@ -95,18 +94,22 @@ def test_dvolume_drho_w7x_integration(w7x_wout):
     """Test that integrating dV/drho gives a reasonable total volume for W7-X."""
     n_points = 1000
     rho = jnp.linspace(0.001, 0.99, n_points)  # Avoid exact boundaries
-    
+
     dv_drho = dvolume_drho(w7x_wout, rho)
-    
+
     drho = rho[1] - rho[0]
     total_volume = jnp.trapezoid(dv_drho, dx=drho)
-    
-    expected_volume_min = 20.0   # m³ (conservative lower bound)
-    expected_volume_max = 35.0   # m³ (conservative upper bound)
-    assert total_volume > expected_volume_min, f"Volume {total_volume:.2f} m³ is too small"
-    assert total_volume < expected_volume_max, f"Volume {total_volume:.2f} m³ is too large"
+
+    expected_volume_min = 20.0  # m³ (conservative lower bound)
+    expected_volume_max = 35.0  # m³ (conservative upper bound)
+    assert (
+        total_volume > expected_volume_min
+    ), f"Volume {total_volume:.2f} m³ is too small"
+    assert (
+        total_volume < expected_volume_max
+    ), f"Volume {total_volume:.2f} m³ is too large"
     assert jnp.isfinite(total_volume), "Total volume is not finite"
-    
+
     assert total_volume > 0, "Total volume should be positive"
 
 
@@ -122,12 +125,12 @@ def test_extrapolation_beyond_lcms(torus_wout):
         ),
         axis=-1,
     )
-    
+
     # Test rphiz extrapolation
     rphiz = evaluate_rphiz_on_toroidal_grid(torus_wout, rho_theta_phi)
     assert rphiz.shape == (10, 6, 7, 3)
     assert np.all(np.isfinite(rphiz)), "Extrapolated rphiz contains NaN or Inf"
-    
+
     # Check that flux surfaces expand outward for rho > 1
     # Compare rho=1.0 vs rho=1.2 at the same (theta, phi)
     idx_rho_1_0 = 8  # rho ≈ 1.07
@@ -136,22 +139,23 @@ def test_extrapolation_beyond_lcms(torus_wout):
     r_at_1_2 = rphiz[idx_rho_1_2, :, :, 0]
     z_at_1_0 = rphiz[idx_rho_1_0, :, :, 2]
     z_at_1_2 = rphiz[idx_rho_1_2, :, :, 2]
-    
+
     # Surfaces should expand: distance from axis should increase
     # For a torus, axis is at (R0, Z0) = (2.0, 0.0)
-    dist_1_0 = jnp.sqrt((r_at_1_0 - 2.0)**2 + z_at_1_0**2)
-    dist_1_2 = jnp.sqrt((r_at_1_2 - 2.0)**2 + z_at_1_2**2)
+    dist_1_0 = jnp.sqrt((r_at_1_0 - 2.0) ** 2 + z_at_1_0**2)
+    dist_1_2 = jnp.sqrt((r_at_1_2 - 2.0) ** 2 + z_at_1_2**2)
     assert jnp.all(dist_1_2 >= dist_1_0), "Flux surfaces should expand for rho > 1"
-    
+
     # Test magnetic field extrapolation
     bfield = evaluate_magnetic_field_on_toroidal_grid(torus_wout, rho_theta_phi)
     assert bfield.shape == (10, 6, 7, 3)
     assert np.all(np.isfinite(bfield)), "Extrapolated B field contains NaN or Inf"
-    
+
     # Magnetic field should be continuous across rho=1 boundary
     b_mag = jnp.linalg.norm(bfield, axis=-1)
     # Compare rho just below 1.0 vs just above
     idx_below = 7  # rho ≈ 0.93
     idx_above = 9  # rho = 1.2
-    assert jnp.allclose(b_mag[idx_below], b_mag[idx_above], rtol=0.2), \
-        "B field should be continuous across LCMS"
+    assert jnp.allclose(
+        b_mag[idx_below], b_mag[idx_above], rtol=0.2
+    ), "B field should be continuous across LCMS"

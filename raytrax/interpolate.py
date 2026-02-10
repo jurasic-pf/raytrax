@@ -89,9 +89,7 @@ def _apply_B_stellarator_symmetry(
     BR_q = sign * BR_m
     cp_q = jnp.cos(phi)
     sp_q = jnp.sin(phi)
-    return jnp.stack(
-        [BR_q * cp_q - Bphi_m * sp_q, BR_q * sp_q + Bphi_m * cp_q, BZ_m]
-    )
+    return jnp.stack([BR_q * cp_q - Bphi_m * sp_q, BR_q * sp_q + Bphi_m * cp_q, BZ_m])
 
 
 @jt.jaxtyped(typechecker=typechecker)

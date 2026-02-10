@@ -68,10 +68,10 @@ class BeamProfile:
 
     magnetic_field: jt.Float[jax.Array, "npoints 3"]
     """The magnetic field vector along the beam in T."""
-    
+
     normalized_effective_radius: jt.Float[jax.Array, "npoints"]
     """The normalized effective minor radius (rho) along the beam."""
-    
+
     linear_power_density: jt.Float[jax.Array, "npoints"]
     """The linear power density along the beam."""
 
@@ -82,7 +82,7 @@ class RadialProfile:
 
     rho: jt.Float[jax.Array, "npoints"]
     """The normalized effective minor radius."""
-    
+
     volumetric_power_density: jt.Float[jax.Array, "npoints"]
     """The volumetric power density in W/m³."""
 
@@ -110,9 +110,10 @@ class EquilibriumInterpolator:
 
     rho: jt.Float[jax.Array, "npoints"]
     """The normalized effective minor radius at each point on the interpolation grid."""
-    
+
     equilibrium: WoutLike
     """The original equilibrium data."""
+
 
 @dataclass
 class RadialProfiles:
