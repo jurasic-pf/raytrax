@@ -248,48 +248,24 @@ def main():
             print(f"\nTRAVIS LCMS entry: s = {s_lcms_travis:.4f} m")
             print(f"raytrax starts at:  s = {s[0]:.4f} m")
 
-        # Compute geometric arc length for TRAVIS from XYZ positions
-        # (TRAVIS's reported path may include offset or use v_gr instead of geometric distance)
         from scipy.interpolate import interp1d
 
-        # Compute geometric arc length from antenna through all TRAVIS points
-        travis_pos_all = travis_result.position_m
-        s_travis_geom_all = np.zeros(len(travis_pos_all))
+        # Extract TRAVIS data from LCMS onwards
+        travis_pos_from_lcms = travis_result.position_m[travis_lcms_idx:]
+        s_travis_from_lcms = travis_result.arc_length_m[travis_lcms_idx:] - s_lcms_travis
         
-        # Start from antenna position (assume first point is antenna)
-        antenna_pos = travis_pos_all[0]
-        for i in range(1, len(travis_pos_all)):
-            dr = travis_pos_all[i] - travis_pos_all[i-1]
-            s_travis_geom_all[i] = s_travis_geom_all[i-1] + np.linalg.norm(dr)
+        # Align TRAVIS arc length to match raytrax starting point (both at LCMS entry)
+        s_travis_aligned = s_travis_from_lcms + s[0]
         
-        # Infer offset: difference between TRAVIS's reported path and geometric arc length
-        # Use the LCMS entry point for this comparison
-        s_travis_geom_at_lcms = s_travis_geom_all[travis_lcms_idx]
-        s_travis_reported_at_lcms = travis_result.arc_length_m[travis_lcms_idx]
-        path_offset = s_travis_reported_at_lcms - s_travis_geom_at_lcms
-        
-        # Extract from LCMS onwards and use geometric arc length
-        travis_pos_from_lcms = travis_pos_all[travis_lcms_idx:]
-        s_travis_geom_from_lcms = s_travis_geom_all[travis_lcms_idx:] - s_travis_geom_all[travis_lcms_idx]
-        
-        print(f"\nTRAVIS path analysis:")
-        print(f"  Geometric distance antenna->LCMS: {s_travis_geom_at_lcms:.6f} m")
-        print(f"  TRAVIS reported path at LCMS: {s_travis_reported_at_lcms:.6f} m")
-        print(f"  Inferred offset: {path_offset:.6f} m")
-        print(f"  Geometric arc length (LCMS->end): {s_travis_geom_from_lcms[-1]:.4f} m")
-        
-        # Align to match raytrax starting point (both at LCMS entry)
-        s_travis_geom_aligned = s_travis_geom_from_lcms + s[0]
-        
-        # Find overlapping geometric arc length region
-        s_min = max(s[0], s_travis_geom_aligned[0])
-        s_max = min(s[-1], s_travis_geom_aligned[-1])
+        # Find overlapping arc length region
+        s_min = max(s[0], s_travis_aligned[0])
+        s_max = min(s[-1], s_travis_aligned[-1])
 
         mask_rx = (s >= s_min) & (s <= s_max)
 
-        # Interpolate TRAVIS data onto raytrax geometric arc length points
+        # Interpolate TRAVIS data onto raytrax arc length points
         tr_pos_interp = interp1d(
-            s_travis_geom_aligned,
+            s_travis_aligned,
             travis_pos_from_lcms,
             axis=0,
             kind="linear",
@@ -297,14 +273,14 @@ def main():
             fill_value="extrapolate",
         )
         tr_rho_interp = interp1d(
-            s_travis_geom_aligned,
+            s_travis_aligned,
             travis_result.rho[travis_lcms_idx:],
             kind="linear",
             bounds_error=False,
             fill_value="extrapolate",
         )
         tr_B_interp = interp1d(
-            s_travis_geom_aligned,
+            s_travis_aligned,
             travis_result.magnetic_field_magnitude_T[travis_lcms_idx:],
             kind="linear",
             bounds_error=False,
@@ -335,17 +311,12 @@ def main():
         rho_arr_rx = rho_arr[mask_rx]
         rho_diff = rho_arr_rx - rho_travis_at_rx
 
-        print(f"\nXYZ Position: RMS = {np.sqrt(np.mean(pos_dist**2))*1000:.2f} mm")
-        print(f"|B|: Mean error = {np.mean(np.abs(B_diff/B_travis_at_rx))*100:.2f}%")
-        print(f"ne:  Mean error = {np.mean(np.abs(ne_diff/ne_travis_at_rx))*100:.2f}%")
-        print(f"Te:  Mean error = {np.mean(np.abs(te_diff/te_travis_at_rx))*100:.2f}%")
-        print(f"rho: RMS = {np.sqrt(np.mean(rho_diff**2)):.4f}")
-        
-        # Diagnostic: show rho values at a few points
-        print(f"\nρ comparison at matching points:")
-        for i in [0, len(rho_arr_rx)//4, len(rho_arr_rx)//2, 3*len(rho_arr_rx)//4, -1]:
-            if i < len(rho_arr_rx):
-                print(f"  Point {i}: raytrax ρ={rho_arr_rx[i]:.4f}, TRAVIS ρ={rho_travis_at_rx[i]:.4f}, diff={rho_diff[i]:.4f}")
+        print(f"\nComparison statistics:")
+        print(f"  XYZ Position: RMS = {np.sqrt(np.mean(pos_dist**2))*1000:.2f} mm")
+        print(f"  |B|: Mean error = {np.mean(np.abs(B_diff/B_travis_at_rx))*100:.2f}%")
+        print(f"  ne:  Mean error = {np.mean(np.abs(ne_diff/ne_travis_at_rx))*100:.2f}%")
+        print(f"  Te:  Mean error = {np.mean(np.abs(te_diff/te_travis_at_rx))*100:.2f}%")
+        print(f"  rho: RMS = {np.sqrt(np.mean(rho_diff**2)):.4f}")
         
         # Detailed tabulation - write to file
         table_file = Path(__file__).parent / "data" / "rho_comparison.txt"
