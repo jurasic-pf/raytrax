@@ -147,19 +147,24 @@ def absorption_coefficient(
             ),
         )
     # Absorption coefficient from Fidone et al., Phys. Fluids 1988:
-    #   alpha = (omega/8) * Xp * I / |F|
-    # where F is the power flux and I is the resonance integral.
-    # Using the power flux normalization F = 0.5 * dH/dN:
-    #   alpha = omega*pi*Xp/c * I / |F|
-    # After accounting for Maxwellian distribution normalization:
-    #   alpha = -omega*Xp*sqrt(pi*mu/2)/c * resonance_integral / |F|
-    # where resonance_integral < 0 for absorption, giving alpha > 0.
+    #   alpha = (omega/(8*pi)) * Xp * I / |S|
+    # where S is the Poynting flux and I is the resonance integral.
+    # 
+    # We use the power flux F = 0.5 * dH/dN instead of the full Poynting flux  
+    # S = (c/(16*pi)) * dH/dN, giving a factor of (c/(8*pi)) difference:
+    #   alpha = omega*Xp/c * I / |F|
+    # 
+    # After accounting for Maxwellian distribution normalization, where the 
+    # resonance integral I includes a factor of sqrt(2*pi/mu):
+    #   alpha = -omega*Xp*sqrt(mu/(2*pi))/c * resonance_integral / |F|
+    # 
+    # The resonance_integral < 0 for absorption, giving alpha > 0.
     from scipy.constants import c as speed_of_light
 
     omega = 2 * jnp.pi * frequency
     Xp = (plasma_frequency / frequency) ** 2
     mu = 2 / thermal_velocity**2
-    prefactor = -omega * Xp * jnp.sqrt(jnp.pi * mu / 2) / speed_of_light
+    prefactor = -omega * Xp * jnp.sqrt(mu / (2 * jnp.pi)) / speed_of_light
 
     # Avoid division by zero or NaN when power flux is very small or invalid (near cutoff)
     power_flux_magnitude = jnp.linalg.norm(power_flux_vector)
