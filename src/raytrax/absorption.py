@@ -212,9 +212,9 @@ def compute_resonance_integral(
         polarization_vector: Normalized polarization vector in Stix coordinates.
         thermal_velocity: Normalized electron thermal velocity (v_th / c).
     """  # noqa: E501
-    # determine the integration bounds
-    # see above for the description of the resonance condition as a circle in
-    # the u_perp, u_para plane. This determins u_min and u_max as the left and right
+    # Determine the integration bounds
+    # See above for the description of the resonance condition as a circle in
+    # the u_perp, u_para plane. This determines u_min and u_max as the left and right
     # boundaries of the circle.
     nY = harmonic_index * cyclotron_frequency / frequency
     n_para = refractive_index_para
@@ -224,25 +224,34 @@ def compute_resonance_integral(
     u_min = u_res - delta_u
     u_max = u_res + delta_u
 
-    # define grid in u_para
-    u_grid = jnp.linspace(u_min, u_max, 1000)
+    # Early return if resonance region doesn't intersect bulk of distribution.
+    # Similar to Travis's Check_ec_res_n, this checks if the resonance region
+    # intersects with the bulk of the Maxwellian. Use u_cutoff = 5 * thermal_velocity
+    # (corresponding to exp(-12.5) ≈ 4e-6 of the distribution peak).
+    u_cutoff = 5.0 * thermal_velocity
+    resonance_in_bulk = jnp.minimum(jnp.abs(u_min), jnp.abs(u_max)) < u_cutoff
 
-    # compute the integrand values
-    integrand_values = jax.vmap(
-        lambda u: resonance_integrand(
-            harmonic_index=harmonic_index,
-            cyclotron_frequency=cyclotron_frequency,
-            frequency=frequency,
-            refractive_index_para=refractive_index_para,
-            refractive_index_perp=refractive_index_perp,
-            parallel_momentum=u,
-            thermal_velocity=thermal_velocity,
-            polarization_vector=polarization_vector,
-        )
-    )(u_grid)
+    def compute_integral():
+        # Define grid in u_para
+        u_grid = jnp.linspace(u_min, u_max, 1000)
 
-    # integrate using the trapezoidal rule
-    return jnp.trapezoid(integrand_values, u_grid)
+        # Compute the integrand values
+        integrand_values = jax.vmap(
+            lambda u: resonance_integrand(
+                harmonic_index=harmonic_index,
+                cyclotron_frequency=cyclotron_frequency,
+                frequency=frequency,
+                refractive_index_para=refractive_index_para,
+                refractive_index_perp=refractive_index_perp,
+                parallel_momentum=u,
+                thermal_velocity=thermal_velocity,
+                polarization_vector=polarization_vector,
+            )
+        )(u_grid)
+        # Integrate using the trapezoidal rule
+        return jnp.trapezoid(integrand_values, u_grid)
+
+    return jax.lax.cond(resonance_in_bulk, compute_integral, lambda: 0.0)
 
 
 def resonance_integrand(
