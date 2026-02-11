@@ -1,5 +1,6 @@
 import jax
 import jax.numpy as jnp
+import interpax
 from raytrax import ray, solver
 
 jax.config.update("jax_enable_x64", True)
@@ -25,17 +26,49 @@ def test_ray_tracing():
         mode="X",
     )
 
-    def magnetic_field_interpolator(position):
-        return jnp.array([10.0, 0.0, 0.0])
+    # Create mock interpax interpolators
+    # Magnetic field: constant field in cylindrical coords (shape: (2, 2, 2, 3))
+    magnetic_field_interpolator = interpax.Interpolator3D(
+        x=jnp.array([0.0, 10.0]),  # r
+        y=jnp.array([0.0, 1.0]),  # phi
+        z=jnp.array([0.0, 1.0]),  # z
+        f=jnp.array(
+            [
+                [
+                    [[10.0, 0.0, 0.0], [10.0, 0.0, 0.0]],
+                    [[10.0, 0.0, 0.0], [10.0, 0.0, 0.0]],
+                ],
+                [
+                    [[10.0, 0.0, 0.0], [10.0, 0.0, 0.0]],
+                    [[10.0, 0.0, 0.0], [10.0, 0.0, 0.0]],
+                ],
+            ]
+        ),
+        method="linear",
+    )
 
-    def rho_interpolator(position):
-        return jnp.array(0.5)
+    # Rho: constant value (shape: (2, 2, 2))
+    rho_interpolator = interpax.Interpolator3D(
+        x=jnp.array([0.0, 10.0]),
+        y=jnp.array([0.0, 1.0]),
+        z=jnp.array([0.0, 1.0]),
+        f=jnp.array([[[0.5, 0.5], [0.5, 0.5]], [[0.5, 0.5], [0.5, 0.5]]]),
+        method="linear",
+    )
 
-    def electron_density_profile_interpolator(rho):
-        return jnp.array(0.1)
+    # Electron density profile
+    electron_density_profile_interpolator = interpax.Interpolator1D(
+        x=jnp.array([0.0, 1.0]),
+        f=jnp.array([0.1, 0.1]),
+        method="linear",
+    )
 
-    def electron_temperature_profile_interpolator(rho):
-        return jnp.array(1.0)
+    # Electron temperature profile
+    electron_temperature_profile_interpolator = interpax.Interpolator1D(
+        x=jnp.array([0.0, 1.0]),
+        f=jnp.array([1.0, 1.0]),
+        method="linear",
+    )
 
     ray_states, ray_quantities = solver.solve(
         state,
@@ -44,6 +77,7 @@ def test_ray_tracing():
         rho_interpolator,
         electron_density_profile_interpolator,
         electron_temperature_profile_interpolator,
+        nfp=5,
     )
     print(f"Ray states: {len(ray_states)}")
     print(f"Ray quantities: {len(ray_quantities)}")
@@ -65,22 +99,45 @@ def test_quantities_computed_during_solve():
         mode="X",
     )
 
-    # Define interpolators for testing
-    def magnetic_field_interpolator(position):
-        # Return a 3D vector regardless of input shape
-        return jnp.array([10.0, 0.0, 0.0])
+    # Create mock interpax interpolators
+    magnetic_field_interpolator = interpax.Interpolator3D(
+        x=jnp.array([0.0, 10.0]),
+        y=jnp.array([0.0, 1.0]),
+        z=jnp.array([0.0, 1.0]),
+        f=jnp.array(
+            [
+                [
+                    [[10.0, 0.0, 0.0], [10.0, 0.0, 0.0]],
+                    [[10.0, 0.0, 0.0], [10.0, 0.0, 0.0]],
+                ],
+                [
+                    [[10.0, 0.0, 0.0], [10.0, 0.0, 0.0]],
+                    [[10.0, 0.0, 0.0], [10.0, 0.0, 0.0]],
+                ],
+            ]
+        ),
+        method="linear",
+    )
 
-    def rho_interpolator(position):
-        # Return a scalar
-        return jnp.array(0.5)
+    rho_interpolator = interpax.Interpolator3D(
+        x=jnp.array([0.0, 10.0]),
+        y=jnp.array([0.0, 1.0]),
+        z=jnp.array([0.0, 1.0]),
+        f=jnp.array([[[0.5, 0.5], [0.5, 0.5]], [[0.5, 0.5], [0.5, 0.5]]]),
+        method="linear",
+    )
 
-    def electron_density_profile_interpolator(rho):
-        # Return a scalar
-        return jnp.array(0.1)
+    electron_density_profile_interpolator = interpax.Interpolator1D(
+        x=jnp.array([0.0, 1.0]),
+        f=jnp.array([0.1, 0.1]),
+        method="linear",
+    )
 
-    def electron_temperature_profile_interpolator(rho):
-        # Return a scalar
-        return jnp.array(1.0)
+    electron_temperature_profile_interpolator = interpax.Interpolator1D(
+        x=jnp.array([0.0, 1.0]),
+        f=jnp.array([1.0, 1.0]),
+        method="linear",
+    )
 
     # Solve ray equations - now returns both states and quantities
     ray_states, ray_quantities = solver.solve(
@@ -90,6 +147,7 @@ def test_quantities_computed_during_solve():
         rho_interpolator,
         electron_density_profile_interpolator,
         electron_temperature_profile_interpolator,
+        nfp=5,
     )
 
     # Check that we have the right number of quantities

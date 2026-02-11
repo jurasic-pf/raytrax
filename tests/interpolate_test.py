@@ -13,10 +13,38 @@ from raytrax.interpolate import (
     cylindrical_grid_for_equilibrium,
     interpolate_toroidal_to_cylindrical_grid,
     _map_to_fundamental_domain,
+    _apply_B_stellarator_symmetry,
 )
 from raytrax.types import RadialProfiles
 
 from .fixtures import torus_wout, w7x_wout
+
+
+def _make_B_callable(B_interp, nfp):
+    """Helper: wrap interpax B interpolator with coordinate transforms for tests."""
+
+    def wrapper(position):
+        r = jnp.sqrt(position[0] ** 2 + position[1] ** 2)
+        phi = jnp.arctan2(position[1], position[0])
+        z = position[2]
+        phi_mapped, z_query, in_second_half = _map_to_fundamental_domain(phi, z, nfp)
+        B_grid = B_interp(r, phi_mapped, z_query)
+        return _apply_B_stellarator_symmetry(B_grid, phi_mapped, phi, in_second_half)
+
+    return wrapper
+
+
+def _make_rho_callable(rho_interp, nfp):
+    """Helper: wrap interpax rho interpolator with coordinate transforms for tests."""
+
+    def wrapper(position):
+        r = jnp.sqrt(position[0] ** 2 + position[1] ** 2)
+        phi = jnp.arctan2(position[1], position[0])
+        z = position[2]
+        phi_mapped, z_query, _ = _map_to_fundamental_domain(phi, z, nfp)
+        return rho_interp(r, phi_mapped, z_query)
+
+    return wrapper
 
 
 def test_map_to_fundamental_domain():
@@ -160,7 +188,8 @@ def test_cylindrical_grid_for_equilibrium(torus_wout):
 def test_build_magnetic_field_interpolator_w7x(w7x_wout):
     """Test the magnetic field interpolator using the W7X equilibrium."""
     interpolator = get_interpolator_for_equilibrium(w7x_wout)
-    B_interpolator = build_magnetic_field_interpolator(interpolator)
+    B_interp_raw = build_magnetic_field_interpolator(interpolator)
+    B_interpolator = _make_B_callable(B_interp_raw, w7x_wout.nfp)
     # Test the interpolator at different positions
     # Use positions we know are within the W7X geometry
     R_major = 5.6
@@ -224,7 +253,7 @@ def test_build_radial_interpolators_w7x(w7x_wout):
     n_rho_profile = 50
     rho_profile = jnp.linspace(0, 1, n_rho_profile)
     # Sample parabolic profiles for density and temperature
-    ne_profile = 1.0 * (1 - rho_profile**2)
+    ne_profile = 1.0 * (rho_profile**2)
     Te_profile = 3.0 * (1 - rho_profile**2)
 
     # Create RadialProfiles object
@@ -233,7 +262,8 @@ def test_build_radial_interpolators_w7x(w7x_wout):
     )
 
     # Build the radial interpolators using the new individual functions
-    rho_interpolator = build_rho_interpolator(interpolator)
+    rho_interp_raw = build_rho_interpolator(interpolator)
+    rho_interpolator = _make_rho_callable(rho_interp_raw, w7x_wout.nfp)
     ne_profile_interpolator = build_electron_density_profile_interpolator(
         radial_profiles
     )
@@ -347,7 +377,8 @@ def test_individual_interpolator_functions_w7x(w7x_wout):
     )
 
     # Test individual functions
-    rho_interpolator = build_rho_interpolator(equilibrium_interpolator)
+    rho_interp_raw = build_rho_interpolator(equilibrium_interpolator)
+    rho_interpolator = _make_rho_callable(rho_interp_raw, w7x_wout.nfp)
     ne_profile_interpolator = build_electron_density_profile_interpolator(
         radial_profiles
     )
@@ -389,8 +420,10 @@ def test_stellarator_symmetry_in_interpolators(w7x_wout):
     Field periodicity: (R, phi, Z) == (R, phi + 2*pi/nfp, Z).
     """
     equilibrium_interpolator = get_interpolator_for_equilibrium(w7x_wout)
-    B_interpolator = build_magnetic_field_interpolator(equilibrium_interpolator)
-    rho_interpolator = build_rho_interpolator(equilibrium_interpolator)
+    B_interp_raw = build_magnetic_field_interpolator(equilibrium_interpolator)
+    B_interpolator = _make_B_callable(B_interp_raw, w7x_wout.nfp)
+    rho_interp_raw = build_rho_interpolator(equilibrium_interpolator)
+    rho_interpolator = _make_rho_callable(rho_interp_raw, w7x_wout.nfp)
 
     nfp = w7x_wout.nfp  # Should be 5 for W7-X
     period = 2.0 * jnp.pi / nfp
@@ -454,8 +487,10 @@ def test_extrapolation_in_cylindrical_grid(w7x_wout):
     )
 
     interpolator = get_interpolator_for_equilibrium(w7x_wout)
-    B_interpolator = build_magnetic_field_interpolator(interpolator)
-    rho_interpolator = build_rho_interpolator(interpolator)
+    B_interp_raw = build_magnetic_field_interpolator(interpolator)
+    B_interpolator = _make_B_callable(B_interp_raw, w7x_wout.nfp)
+    rho_interp_raw = build_rho_interpolator(interpolator)
+    rho_interpolator = _make_rho_callable(rho_interp_raw, w7x_wout.nfp)
 
     # Test position near the plasma boundary at larger major radius
     R_test = 6.0  # Near outboard edge

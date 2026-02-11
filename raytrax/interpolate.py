@@ -204,19 +204,27 @@ def cylindrical_grid_for_equilibrium(
 
 
 def build_magnetic_field_interpolator(
-    equilibrium_interpolator: MagneticConfiguration,
-) -> Callable[[jt.Float[jax.Array, "3"]], jt.Float[jax.Array, "3"]]:
-    """Build a magnetic field interpolator from the equilibrium interpolator."""
-    if not equilibrium_interpolator.stellarator_symmetric:
+    magnetic_configuration: MagneticConfiguration,
+) -> interpax.Interpolator3D:
+    """Build a magnetic field interpolator from the magnetic configuration.
+
+    Returns an interpax.Interpolator3D that interpolates the magnetic field in
+    cylindrical coordinates (r, phi, z) on the fundamental domain [0, π/nfp].
+
+    Note: The caller must handle:
+    - Cartesian to cylindrical coordinate conversion
+    - Stellarator symmetry mapping using _map_to_fundamental_domain()
+    - Field symmetry transformation using _apply_B_stellarator_symmetry()
+    """
+    if not magnetic_configuration.stellarator_symmetric:
         raise NotImplementedError(
             "Non stellarator-symmetric equilibria not yet supported"
         )
 
-    Bxyz = equilibrium_interpolator.magnetic_field
-    rphiz = equilibrium_interpolator.rphiz
-    nfp = equilibrium_interpolator.nfp
+    Bxyz = magnetic_configuration.magnetic_field
+    rphiz = magnetic_configuration.rphiz
 
-    interpolator = interpax.Interpolator3D(
+    return interpax.Interpolator3D(
         x=rphiz[:, 0, 0, 0],
         y=rphiz[0, :, 0, 1],
         z=rphiz[0, 0, :, 2],
@@ -225,40 +233,34 @@ def build_magnetic_field_interpolator(
         extrap=0.0,
     )
 
-    def interpolator_cartesian(
-        position: jt.Float[jax.Array, "3"],
-    ) -> jt.Float[jax.Array, "3"]:
-        r = jnp.sqrt(position[0] ** 2 + position[1] ** 2)
-        phi = jnp.arctan2(position[1], position[0])
-        z = position[2]
-        phi_mapped, z_query, in_second_half = _map_to_fundamental_domain(phi, z, nfp)
-        B_grid = interpolator(r, phi_mapped, z_query)
-        return _apply_B_stellarator_symmetry(B_grid, phi_mapped, phi, in_second_half)
-
-    return interpolator_cartesian
-
 
 def build_rho_interpolator(
-    equilibrium_interpolator: MagneticConfiguration,
-) -> Callable[[jt.Float[jax.Array, "3"]], jt.Float[jax.Array, ""]]:
-    """Build rho interpolator for the given equilibrium.
+    magnetic_configuration: MagneticConfiguration,
+) -> interpax.Interpolator3D:
+    """Build rho interpolator for the given magnetic configuration.
+
+    Returns an interpax.Interpolator3D that interpolates rho in cylindrical
+    coordinates (r, phi, z) on the fundamental domain [0, π/nfp].
+
+    Note: The caller must handle:
+    - Cartesian to cylindrical coordinate conversion
+    - Stellarator symmetry mapping using _map_to_fundamental_domain()
 
     Args:
-        equilibrium_interpolator: The equilibrium interpolator.
+        magnetic_configuration: The magnetic configuration.
 
     Returns:
-        A function that maps position to radial coordinate (rho).
+        An interpax.Interpolator3D object.
     """
-    if not equilibrium_interpolator.stellarator_symmetric:
+    if not magnetic_configuration.stellarator_symmetric:
         raise NotImplementedError(
             "Non stellarator-symmetric equilibria not yet supported"
         )
 
-    rho = equilibrium_interpolator.rho
-    rphiz = equilibrium_interpolator.rphiz
-    nfp = equilibrium_interpolator.nfp
+    rho = magnetic_configuration.rho
+    rphiz = magnetic_configuration.rphiz
 
-    rho_interpolator = interpax.Interpolator3D(
+    return interpax.Interpolator3D(
         x=rphiz[:, 0, 0, 0],
         y=rphiz[0, :, 0, 1],
         z=rphiz[0, 0, :, 2],
@@ -267,85 +269,60 @@ def build_rho_interpolator(
         extrap=1.1,
     )
 
-    def rho_interpolator_cartesian(
-        position: jt.Float[jax.Array, "3"],
-    ) -> jt.Float[jax.Array, ""]:
-        r = jnp.sqrt(position[0] ** 2 + position[1] ** 2)
-        phi = jnp.arctan2(position[1], position[0])
-        z = position[2]
-        phi_mapped, z_query, _ = _map_to_fundamental_domain(phi, z, nfp)
-        return rho_interpolator(r, phi_mapped, z_query)
-
-    return rho_interpolator_cartesian
-
 
 def build_electron_density_profile_interpolator(
     radial_profiles: RadialProfiles,
-) -> Callable[[jt.Float[jax.Array, ""]], jt.Float[jax.Array, ""]]:
+) -> interpax.Interpolator1D:
     """Build electron density profile interpolator.
 
     Args:
         radial_profiles: The radial profiles.
 
     Returns:
-        A function that maps rho to electron density.
+        An interpax.Interpolator1D that maps rho to electron density.
     """
-    ne_interpolator = interpax.Interpolator1D(
+    return interpax.Interpolator1D(
         x=radial_profiles.rho,
         f=radial_profiles.electron_density,
         method="linear",
         extrap=0.0,
     )
 
-    def ne_profile_interpolator(
-        rho: jt.Float[jax.Array, ""],
-    ) -> jt.Float[jax.Array, ""]:
-        return ne_interpolator(rho)
-
-    return ne_profile_interpolator
-
 
 def build_electron_temperature_profile_interpolator(
     radial_profiles: RadialProfiles,
-) -> Callable[[jt.Float[jax.Array, ""]], jt.Float[jax.Array, ""]]:
+) -> interpax.Interpolator1D:
     """Build electron temperature profile interpolator.
 
     Args:
         radial_profiles: The radial profiles.
 
     Returns:
-        A function that maps rho to electron temperature.
+        An interpax.Interpolator1D that maps rho to electron temperature.
     """
-    Te_interpolator = interpax.Interpolator1D(
+    return interpax.Interpolator1D(
         x=radial_profiles.rho,
         f=radial_profiles.electron_temperature,
         method="linear",
         extrap=0.0,
     )
 
-    def Te_profile_interpolator(
-        rho: jt.Float[jax.Array, ""],
-    ) -> jt.Float[jax.Array, ""]:
-        return Te_interpolator(rho)
-
-    return Te_profile_interpolator
-
 
 def build_radial_interpolators(
-    equilibrium_interpolator: MagneticConfiguration,
+    magnetic_configuration: MagneticConfiguration,
     radial_profiles: RadialProfiles,
 ) -> tuple[
-    Callable[[jt.Float[jax.Array, "3"]], jt.Float[jax.Array, ""]],
-    Callable[[jt.Float[jax.Array, ""]], jt.Float[jax.Array, ""]],
-    Callable[[jt.Float[jax.Array, ""]], jt.Float[jax.Array, ""]],
+    interpax.Interpolator3D,
+    interpax.Interpolator1D,
+    interpax.Interpolator1D,
 ]:
-    """Build radial interpolators for the given equilibrium and radial profiles.
+    """Build radial interpolators for the given magnetic configuration and radial profiles.
 
     This is a convenience function that combines the individual interpolator builders.
     For cleaner code, consider using the individual functions directly.
 
     Args:
-        equilibrium_interpolator: The configuration grid.
+        magnetic_configuration: The magnetic configuration.
         radial_profiles: The radial profiles.
 
     Returns:
@@ -354,7 +331,7 @@ def build_radial_interpolators(
         - electron_density_profile_interpolator: maps rho to electron density
         - electron_temperature_profile_interpolator: maps rho to electron temperature
     """
-    rho_interpolator = build_rho_interpolator(equilibrium_interpolator)
+    rho_interpolator = build_rho_interpolator(magnetic_configuration)
     ne_profile_interpolator = build_electron_density_profile_interpolator(
         radial_profiles
     )

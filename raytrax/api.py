@@ -61,31 +61,19 @@ def get_interpolator_for_equilibrium(
 
 
 def trace(
-    equilibrium_interpolator: MagneticConfiguration,
+    magnetic_configuration: MagneticConfiguration,
     radial_profiles: RadialProfiles,
     beam: Beam,
 ) -> TracingResult:
-    """Solve the ray tracing equations for a given beam given an MHD equilibrium.
+    """Trace a single beam through the plasma.
 
     Args:
-        equilibrium_interpolator: Magnetic configuration with gridded data
+        magnetic_configuration: Magnetic configuration with gridded data
         radial_profiles: Radial profiles of plasma parameters
-        beam: A Beam object containing the initial conditions of the beam
+        beam: Beam initial conditions (position, direction, frequency, mode)
 
     Returns:
-        A TracingResult object containing the results of the tracing.
-
-    Note:
-        For best performance when tracing multiple beams, reuse the same
-        MagneticConfiguration and RadialProfiles objects. Their cached
-        interpolator properties avoid ~1-2s JAX recompilation per call.
-
-    Example:
-        >>> # Trace multiple beams efficiently
-        >>> eq = get_interpolator_for_equilibrium(wout)
-        >>> profiles = RadialProfiles(...)
-        >>> for beam in beams:
-        ...     result = trace(eq, profiles, beam)  # Fast after first call
+        TracingResult with beam profile and radial deposition profile.
     """
     # Use the beam direction as the initial refractive index direction
     initial_state = RayState(
@@ -96,21 +84,19 @@ def trace(
     )
     setting = RaySetting(frequency=beam.frequency, mode=beam.mode)
 
-    # Access cached interpolator properties. These build and cache the interpolators
-    # on first access, then return the same callable objects on subsequent calls.
-    # JAX uses object identity (id()) to cache compiled traces, so returning the
-    # same callable object avoids ~1-2s recompilation overhead.
-    magnetic_field_interpolator = equilibrium_interpolator.magnetic_field_interpolator
-    rho_interpolator = equilibrium_interpolator.rho_interpolator
-    electron_density_profile_interpolator = (
-        radial_profiles.electron_density_interpolator
+    # Build interpolators from the configuration data
+    magnetic_field_interpolator = build_magnetic_field_interpolator(
+        magnetic_configuration
+    )
+    rho_interpolator = build_rho_interpolator(magnetic_configuration)
+    electron_density_profile_interpolator = build_electron_density_profile_interpolator(
+        radial_profiles
     )
     electron_temperature_profile_interpolator = (
-        radial_profiles.electron_temperature_interpolator
+        build_electron_temperature_profile_interpolator(radial_profiles)
     )
-    # Solve ray tracing equations with augmented state vector
-    # This computes all quantities (magnetic field, density, temperature, absorption, power)
-    # in a single pass during ODE integration, avoiding expensive post-processing
+
+    # Solve ray tracing equations
     ray_states, additional_quantities = solve(
         state=initial_state,
         setting=setting,
@@ -118,12 +104,13 @@ def trace(
         rho_interpolator=rho_interpolator,
         electron_density_profile_interpolator=electron_density_profile_interpolator,
         electron_temperature_profile_interpolator=electron_temperature_profile_interpolator,
+        nfp=magnetic_configuration.nfp,
     )
     beam_profile = ray_states_to_beam_profile(ray_states, additional_quantities)
     radial_profile = ray_states_to_radial_profile(
         ray_states,
         additional_quantities,
-        equilibrium_interpolator.rho_1d,
-        equilibrium_interpolator.dvolume_drho,
+        magnetic_configuration.rho_1d,
+        magnetic_configuration.dvolume_drho,
     )
     return TracingResult(beam_profile=beam_profile, radial_profile=radial_profile)

@@ -102,14 +102,9 @@ class TracingResult:
 class MagneticConfiguration:
     """Magnetic configuration and geometry on a cylindrical grid.
 
-    This dataclass contains the interpolation grid data and provides cached
-    interpolator properties. Interpolators are cached as properties to avoid
-    JAX recompilation overhead (~1-2s) when the same object is reused across
-    multiple trace() calls.
-
-    The dataclass is designed to be pytree-compatible (can register with
-    jax.tree_util in the future if needed for transformations). Cached
-    interpolators are excluded from pytree structure via field configuration.
+    Contains the magnetic field B and normalized effective radius rho on a
+    3D cylindrical grid (r, phi, z), along with volume information for
+    computing deposition profiles.
     """
 
     rphiz: jt.Float[jax.Array, "npoints 3"]
@@ -133,65 +128,13 @@ class MagneticConfiguration:
     dvolume_drho: jt.Float[jax.Array, "nrho_1d"]
     """Volume derivative dV/drho on the 1D radial grid."""
 
-    # Private cached interpolators (not part of pytree)
-    _magnetic_field_interpolator: Callable | None = field(
-        default=None, init=False, repr=False, compare=False
-    )
-    _rho_interpolator: Callable | None = field(
-        default=None, init=False, repr=False, compare=False
-    )
-
-    @property
-    def magnetic_field_interpolator(
-        self,
-    ) -> Callable[[jt.Float[jax.Array, "3"]], jt.Float[jax.Array, "3"]]:
-        """Magnetic field interpolator B(x,y,z) (cached on first access).
-
-        The interpolator is built once and cached. Returning the same callable
-        object on subsequent accesses allows JAX to reuse its compiled trace,
-        avoiding ~1-2s recompilation overhead per trace() call.
-        """
-        if self._magnetic_field_interpolator is None:
-            from .interpolate import build_magnetic_field_interpolator
-
-            object.__setattr__(
-                self,
-                "_magnetic_field_interpolator",
-                build_magnetic_field_interpolator(self),
-            )
-        assert self._magnetic_field_interpolator is not None
-        return self._magnetic_field_interpolator
-
-    @property
-    def rho_interpolator(
-        self,
-    ) -> Callable[[jt.Float[jax.Array, "3"]], jt.Float[jax.Array, ""]]:
-        """Normalized effective radius interpolator rho(x,y,z) (cached on first access).
-
-        The interpolator is built once and cached. Returning the same callable
-        object on subsequent accesses allows JAX to reuse its compiled trace,
-        avoiding ~1-2s recompilation overhead per trace() call.
-        """
-        if self._rho_interpolator is None:
-            from .interpolate import build_rho_interpolator
-
-            object.__setattr__(self, "_rho_interpolator", build_rho_interpolator(self))
-        assert self._rho_interpolator is not None
-        return self._rho_interpolator
-
 
 @dataclass
 class RadialProfiles:
-    """Dataclass for holding the electron radial profiles.
+    """Radial profiles of electron density and temperature.
 
-    This dataclass contains 1D radial profile data and provides cached
-    interpolator properties. Interpolators are cached as properties to avoid
-    JAX recompilation overhead (~1-2s) when the same object is reused across
-    multiple trace() calls.
-
-    The dataclass is designed to be pytree-compatible (can register with
-    jax.tree_util in the future if needed for transformations). Cached
-    interpolators are excluded from pytree structure via field configuration.
+    Defines the plasma parameters (density, temperature) as functions of the
+    normalized effective radius rho.
     """
 
     rho: jt.Float[jax.Array, "nrho"]
@@ -202,53 +145,3 @@ class RadialProfiles:
 
     electron_temperature: jt.Float[jax.Array, "nrho"]
     """The electron temperature profile in keV."""
-
-    # Private cached interpolators (not part of pytree)
-    _electron_density_interpolator: Callable | None = field(
-        default=None, init=False, repr=False, compare=False
-    )
-    _electron_temperature_interpolator: Callable | None = field(
-        default=None, init=False, repr=False, compare=False
-    )
-
-    @property
-    def electron_density_interpolator(
-        self,
-    ) -> Callable[[jt.Float[jax.Array, ""]], jt.Float[jax.Array, ""]]:
-        """Electron density interpolator ne(rho) (cached on first access).
-
-        The interpolator is built once and cached. Returning the same callable
-        object on subsequent accesses allows JAX to reuse its compiled trace,
-        avoiding ~1-2s recompilation overhead per trace() call.
-        """
-        if self._electron_density_interpolator is None:
-            from .interpolate import build_electron_density_profile_interpolator
-
-            object.__setattr__(
-                self,
-                "_electron_density_interpolator",
-                build_electron_density_profile_interpolator(self),
-            )
-        assert self._electron_density_interpolator is not None
-        return self._electron_density_interpolator
-
-    @property
-    def electron_temperature_interpolator(
-        self,
-    ) -> Callable[[jt.Float[jax.Array, ""]], jt.Float[jax.Array, ""]]:
-        """Electron temperature interpolator Te(rho) (cached on first access).
-
-        The interpolator is built once and cached. Returning the same callable
-        object on subsequent accesses allows JAX to reuse its compiled trace,
-        avoiding ~1-2s recompilation overhead per trace() call.
-        """
-        if self._electron_temperature_interpolator is None:
-            from .interpolate import build_electron_temperature_profile_interpolator
-
-            object.__setattr__(
-                self,
-                "_electron_temperature_interpolator",
-                build_electron_temperature_profile_interpolator(self),
-            )
-        assert self._electron_temperature_interpolator is not None
-        return self._electron_temperature_interpolator

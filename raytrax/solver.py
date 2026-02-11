@@ -1,10 +1,15 @@
 from collections.abc import Callable
 from functools import partial
 
+import interpax
 import jax
 import jax.numpy as jnp
 import jaxtyping as jt
 from raytrax import absorption, hamiltonian, ray
+from raytrax.interpolate import (
+    _map_to_fundamental_domain,
+    _apply_B_stellarator_symmetry,
+)
 from scipy import integrate
 
 
@@ -40,20 +45,16 @@ def _state_to_y(
     )
 
 
+@jax.jit
 def _right_hand_side(
     s: float,
     y: jt.Float[jax.Array, " n "],
     setting: ray.RaySetting,
-    magnetic_field_interpolator: Callable[
-        [jt.Float[jax.Array, "3"]], jt.Float[jax.Array, "3"]
-    ],
-    rho_interpolator: Callable[[jt.Float[jax.Array, "3"]], jt.Float[jax.Array, ""]],
-    electron_density_profile_interpolator: Callable[
-        [jt.Float[jax.Array, ""]], jt.Float[jax.Array, ""]
-    ],
-    electron_temperature_profile_interpolator: Callable[
-        [jt.Float[jax.Array, ""]], jt.Float[jax.Array, ""]
-    ],
+    magnetic_field_interpolator: interpax.Interpolator3D,
+    rho_interpolator: interpax.Interpolator3D,
+    electron_density_profile_interpolator: interpax.Interpolator1D,
+    electron_temperature_profile_interpolator: interpax.Interpolator1D,
+    nfp: int,
 ) -> jt.Float[jax.Array, " n "]:
     r"""Compute the right-hand side of the 7-component ray tracing ODE.
 
@@ -61,15 +62,37 @@ def _right_hand_side(
     state — they are recomputed at output points via vectorised post-processing,
     which avoids the jacfwd(B) calls and the tight per-component tolerances that
     previously forced ~2 mm step sizes.
+
+    Interpolators are passed as interpax objects (pytrees) rather than closures,
+    which allows JAX to cache compiled traces by data content rather than object
+    identity, avoiding recompilation when passing different interpolator objects
+    with the same underlying data.
     """
     state = _y_to_state(y, s)
+
+    # Helper function to evaluate B field interpolator with coordinate transforms
+    def eval_B(position: jt.Float[jax.Array, "3"]) -> jt.Float[jax.Array, "3"]:
+        r = jnp.sqrt(position[0] ** 2 + position[1] ** 2)
+        phi = jnp.arctan2(position[1], position[0])
+        z = position[2]
+        phi_mapped, z_query, in_second_half = _map_to_fundamental_domain(phi, z, nfp)
+        B_grid = magnetic_field_interpolator(r, phi_mapped, z_query)
+        return _apply_B_stellarator_symmetry(B_grid, phi_mapped, phi, in_second_half)
+
+    # Helper function to evaluate rho interpolator with coordinate transforms
+    def eval_rho(position: jt.Float[jax.Array, "3"]) -> jt.Float[jax.Array, ""]:
+        r = jnp.sqrt(position[0] ** 2 + position[1] ** 2)
+        phi = jnp.arctan2(position[1], position[0])
+        z = position[2]
+        phi_mapped, z_query, _ = _map_to_fundamental_domain(phi, z, nfp)
+        return rho_interpolator(r, phi_mapped, z_query)
 
     # Compute both Hamiltonian gradients in a single backward pass
     hamiltonian_gradient_r, hamiltonian_gradient_n = hamiltonian.hamiltonian_gradients(
         state,
         setting,
-        magnetic_field_interpolator,
-        rho_interpolator,
+        eval_B,
+        eval_rho,
         electron_density_profile_interpolator,
     )
     norm = jnp.linalg.norm(hamiltonian_gradient_n)
@@ -77,10 +100,10 @@ def _right_hand_side(
     dr_ds = hamiltonian_gradient_n / norm
     dn_ds = -hamiltonian_gradient_r / norm
 
-    rho = rho_interpolator(state.position)
+    rho = eval_rho(state.position)
     ne = electron_density_profile_interpolator(rho)
     te = electron_temperature_profile_interpolator(rho)
-    mag = magnetic_field_interpolator(state.position)
+    mag = eval_B(state.position)
     dtau_ds = absorption.absorption_coefficient_conditional(
         refractive_index=state.refractive_index,
         magnetic_field=mag,
@@ -93,43 +116,41 @@ def _right_hand_side(
     return jnp.concatenate([dr_ds, dn_ds, jnp.array([dtau_ds])])
 
 
-# Persistent module-level JIT. Using static_argnames for the interpolators means
-# JAX caches one compiled trace per unique combination of callable objects. As long
-# as the same Python objects are passed across solve() calls, JAX reuses the cached
-# trace instead of re-tracing from scratch each call (~370 ms overhead avoided).
-_rhs_jitted = jax.jit(
-    _right_hand_side,
-    static_argnames=(
-        "magnetic_field_interpolator",
-        "rho_interpolator",
-        "electron_density_profile_interpolator",
-        "electron_temperature_profile_interpolator",
-    ),
-)
-
-
 def _compute_quantities_at_positions(
     positions: jt.Float[jax.Array, "n 3"],
     optical_depths: jt.Float[jax.Array, " n"],
     arc_lengths: jt.Float[jax.Array, " n"],
-    magnetic_field_interpolator: Callable[
-        [jt.Float[jax.Array, "3"]], jt.Float[jax.Array, "3"]
-    ],
-    rho_interpolator: Callable[[jt.Float[jax.Array, "3"]], jt.Float[jax.Array, ""]],
-    electron_density_profile_interpolator: Callable[
-        [jt.Float[jax.Array, ""]], jt.Float[jax.Array, ""]
-    ],
-    electron_temperature_profile_interpolator: Callable[
-        [jt.Float[jax.Array, ""]], jt.Float[jax.Array, ""]
-    ],
+    magnetic_field_interpolator: interpax.Interpolator3D,
+    rho_interpolator: interpax.Interpolator3D,
+    electron_density_profile_interpolator: interpax.Interpolator1D,
+    electron_temperature_profile_interpolator: interpax.Interpolator1D,
+    nfp: int,
 ) -> list[ray.RayQuantities]:
     """Evaluate all diagnostic quantities at a batch of trajectory positions.
 
     Uses jax.vmap for a single vectorised XLA call rather than n separate
     JIT-dispatched calls, eliminating per-point Python overhead.
     """
-    B_all = jax.vmap(magnetic_field_interpolator)(positions)
-    rho_all = jax.vmap(rho_interpolator)(positions)
+
+    # Helper function to evaluate B field with coordinate transforms
+    def eval_B(position: jt.Float[jax.Array, "3"]) -> jt.Float[jax.Array, "3"]:
+        r = jnp.sqrt(position[0] ** 2 + position[1] ** 2)
+        phi = jnp.arctan2(position[1], position[0])
+        z = position[2]
+        phi_mapped, z_query, in_second_half = _map_to_fundamental_domain(phi, z, nfp)
+        B_grid = magnetic_field_interpolator(r, phi_mapped, z_query)
+        return _apply_B_stellarator_symmetry(B_grid, phi_mapped, phi, in_second_half)
+
+    # Helper function to evaluate rho with coordinate transforms
+    def eval_rho(position: jt.Float[jax.Array, "3"]) -> jt.Float[jax.Array, ""]:
+        r = jnp.sqrt(position[0] ** 2 + position[1] ** 2)
+        phi = jnp.arctan2(position[1], position[0])
+        z = position[2]
+        phi_mapped, z_query, _ = _map_to_fundamental_domain(phi, z, nfp)
+        return rho_interpolator(r, phi_mapped, z_query)
+
+    B_all = jax.vmap(eval_B)(positions)
+    rho_all = jax.vmap(eval_rho)(positions)
     ne_all = jax.vmap(electron_density_profile_interpolator)(rho_all)
     te_all = jax.vmap(electron_temperature_profile_interpolator)(rho_all)
 
@@ -156,10 +177,9 @@ def _compute_quantities_at_positions(
 def _straight_line_trace(
     position: jt.Float[jax.Array, "3"],
     direction: jt.Float[jax.Array, "3"],
-    magnetic_field_interpolator: Callable[
-        [jt.Float[jax.Array, "3"]], jt.Float[jax.Array, "3"]
-    ],
-    rho_interpolator: Callable[[jt.Float[jax.Array, "3"]], jt.Float[jax.Array, ""]],
+    magnetic_field_interpolator: interpax.Interpolator3D,
+    rho_interpolator: interpax.Interpolator3D,
+    nfp: int,
     step_size: float = 0.01,
     max_steps: int = 100,
 ) -> tuple[jt.Float[jax.Array, "3"], jt.Float[jax.Array, ""]]:
@@ -172,17 +192,35 @@ def _straight_line_trace(
     Args:
         position: Starting position vector
         direction: Normalized direction vector for the straight line
-        magnetic_field_interpolator: Function to evaluate magnetic field at a position
-        rho_interpolator: Function to evaluate radial coordinate at a position
+        magnetic_field_interpolator: interpax.Interpolator3D for magnetic field
+        rho_interpolator: interpax.Interpolator3D for radial coordinate
+        nfp: Number of field periods for stellarator symmetry
         step_size: Size of each step along the straight line
         max_steps: Maximum number of steps to take
 
     Returns:
         Tuple of (final_position, distance_traveled)
     """
+
+    # Helper functions with coordinate transforms
+    def eval_B(pos: jt.Float[jax.Array, "3"]) -> jt.Float[jax.Array, "3"]:
+        r = jnp.sqrt(pos[0] ** 2 + pos[1] ** 2)
+        phi = jnp.arctan2(pos[1], pos[0])
+        z = pos[2]
+        phi_mapped, z_query, in_second_half = _map_to_fundamental_domain(phi, z, nfp)
+        B_grid = magnetic_field_interpolator(r, phi_mapped, z_query)
+        return _apply_B_stellarator_symmetry(B_grid, phi_mapped, phi, in_second_half)
+
+    def eval_rho(pos: jt.Float[jax.Array, "3"]) -> jt.Float[jax.Array, ""]:
+        r = jnp.sqrt(pos[0] ** 2 + pos[1] ** 2)
+        phi = jnp.arctan2(pos[1], pos[0])
+        z = pos[2]
+        phi_mapped, z_query, _ = _map_to_fundamental_domain(phi, z, nfp)
+        return rho_interpolator(r, phi_mapped, z_query)
+
     # Check if we're already at a valid position
-    initial_B = magnetic_field_interpolator(position)
-    initial_rho = rho_interpolator(position)
+    initial_B = eval_B(position)
+    initial_rho = eval_rho(position)
     initial_valid = jnp.logical_and(jnp.linalg.norm(initial_B) > 0, initial_rho <= 1.0)
 
     def cond_fun(state_tuple):
@@ -193,8 +231,8 @@ def _straight_line_trace(
         pos, step_count, found_valid = state_tuple
         new_pos = pos + step_size * direction
 
-        B = magnetic_field_interpolator(new_pos)
-        rho = rho_interpolator(new_pos)
+        B = eval_B(new_pos)
+        rho = eval_rho(new_pos)
         new_found_valid = jnp.logical_and(jnp.linalg.norm(B) > 0, rho <= 1.0)
 
         return (new_pos, step_count + 1, new_found_valid)
@@ -211,25 +249,17 @@ def _straight_line_trace(
     return final_pos, final_dist
 
 
-_straight_line_trace_jitted = jax.jit(
-    _straight_line_trace,
-    static_argnames=("magnetic_field_interpolator", "rho_interpolator"),
-)
+_straight_line_trace_jitted = jax.jit(_straight_line_trace)
 
 
 def solve(
     state: ray.RayState,
     setting: ray.RaySetting,
-    magnetic_field_interpolator: Callable[
-        [jt.Float[jax.Array, "3"]], jt.Float[jax.Array, "3"]
-    ],
-    rho_interpolator: Callable[[jt.Float[jax.Array, "3"]], jt.Float[jax.Array, ""]],
-    electron_density_profile_interpolator: Callable[
-        [jt.Float[jax.Array, ""]], jt.Float[jax.Array, ""]
-    ],
-    electron_temperature_profile_interpolator: Callable[
-        [jt.Float[jax.Array, ""]], jt.Float[jax.Array, ""]
-    ],
+    magnetic_field_interpolator: interpax.Interpolator3D,
+    rho_interpolator: interpax.Interpolator3D,
+    electron_density_profile_interpolator: interpax.Interpolator1D,
+    electron_temperature_profile_interpolator: interpax.Interpolator1D,
+    nfp: int,
     use_straight_line_init: bool = True,
     straight_line_step_size: float = 0.01,
     max_straight_line_steps: int = 100,
@@ -237,17 +267,16 @@ def solve(
     """Solve the ray tracing equations.
 
     Integrates a 7-component ODE: (position[3], refractive_index[3], optical_depth[1]).
-    Diagnostic quantities (B, ρ, nₑ, Tₑ, α, P) are NOT part of the ODE state; they
-    are evaluated in a single vectorised post-processing pass after the integration,
-    avoiding the jacfwd(B) calls and tight tolerances that previously caused ~2 mm steps.
+    Diagnostic quantities (B, ρ, nₑ, Tₑ, α, P) are computed in post-processing.
 
     Args:
         state: Initial ray state
-        setting: Ray tracing settings
-        magnetic_field_interpolator: Function to evaluate magnetic field at a position
-        rho_interpolator: Function to evaluate radial coordinate at a position
-        electron_density_profile_interpolator: maps rho -> electron density
-        electron_temperature_profile_interpolator: maps rho -> electron temperature
+        setting: Ray tracing settings (frequency, mode)
+        magnetic_field_interpolator: Interpolator for B(r, phi, z)
+        rho_interpolator: Interpolator for rho(r, phi, z)
+        electron_density_profile_interpolator: Interpolator for ne(rho)
+        electron_temperature_profile_interpolator: Interpolator for Te(rho)
+        nfp: Number of field periods for stellarator symmetry
         use_straight_line_init: Whether to use straight line tracing to find valid starting point
         straight_line_step_size: Size of each step for straight line tracing
         max_straight_line_steps: Maximum number of steps for straight line tracing
@@ -267,6 +296,7 @@ def solve(
             direction=direction,
             magnetic_field_interpolator=magnetic_field_interpolator,
             rho_interpolator=rho_interpolator,
+            nfp=nfp,
             step_size=straight_line_step_size,
             max_steps=max_straight_line_steps,
         )
@@ -279,7 +309,14 @@ def solve(
         )
 
     def ray_exits_plasma(_t, y):
-        return float(rho_interpolator(jnp.asarray(y[:3]))) - 1.05
+        # Need to wrap rho evaluation with coordinate transform
+        pos = jnp.asarray(y[:3])
+        r = jnp.sqrt(pos[0] ** 2 + pos[1] ** 2)
+        phi = jnp.arctan2(pos[1], pos[0])
+        z = pos[2]
+        phi_mapped, z_query, _ = _map_to_fundamental_domain(phi, z, nfp)
+        rho_val = rho_interpolator(r, phi_mapped, z_query)
+        return float(rho_val) - 1.05
 
     ray_exits_plasma.terminal = True  # type: ignore
     ray_exits_plasma.direction = 1  # type: ignore
@@ -297,12 +334,13 @@ def solve(
     ray_out_of_bounds.direction = -1  # type: ignore
 
     fun = partial(
-        _rhs_jitted,
+        _right_hand_side,
         setting=setting,
         magnetic_field_interpolator=magnetic_field_interpolator,
         rho_interpolator=rho_interpolator,
         electron_density_profile_interpolator=electron_density_profile_interpolator,
         electron_temperature_profile_interpolator=electron_temperature_profile_interpolator,
+        nfp=nfp,
     )
     y0 = _state_to_y(state)
     t_start = float(initial_arc_length)
@@ -333,6 +371,7 @@ def solve(
         rho_interpolator=rho_interpolator,
         electron_density_profile_interpolator=electron_density_profile_interpolator,
         electron_temperature_profile_interpolator=electron_temperature_profile_interpolator,
+        nfp=nfp,
     )
 
     return ray_states, ray_quantities
