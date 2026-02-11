@@ -22,12 +22,6 @@ from .types import (
 )
 
 
-# Cache built interpolator callables by (id(eq_interp), id(radial_profiles)).
-# Same Python objects → same callable identities → JAX static-arg cache hit → no retrace.
-# Keys are object ids so JAX array contents (not hashable) are never compared.
-_interpolator_cache: dict[tuple[int, int], tuple] = {}
-
-
 def get_interpolator_for_equilibrium(
     equilibrium: WoutLike,
     magnetic_field_scale: float = 1.0,
@@ -74,11 +68,24 @@ def trace(
     """Solve the ray tracing equations for a given beam given an MHD equilibrium.
 
     Args:
-        equilibrium: an MHD equilibrium compatible with `vmecpp.VmecWOut`
-        beam: A Beam object containing the initial conditions of the beam.
+        equilibrium_interpolator: Magnetic configuration with gridded data
+        radial_profiles: Radial profiles of plasma parameters
+        beam: A Beam object containing the initial conditions of the beam
 
     Returns:
         A TracingResult object containing the results of the tracing.
+
+    Note:
+        For best performance when tracing multiple beams, reuse the same
+        MagneticConfiguration and RadialProfiles objects. Their cached
+        interpolator properties avoid ~1-2s JAX recompilation per call.
+
+    Example:
+        >>> # Trace multiple beams efficiently
+        >>> eq = get_interpolator_for_equilibrium(wout)
+        >>> profiles = RadialProfiles(...)
+        >>> for beam in beams:
+        ...     result = trace(eq, profiles, beam)  # Fast after first call
     """
     # Use the beam direction as the initial refractive index direction
     initial_state = RayState(
@@ -88,20 +95,19 @@ def trace(
         arc_length=jnp.array(0.0),
     )
     setting = RaySetting(frequency=beam.frequency, mode=beam.mode)
-    cache_key = (id(equilibrium_interpolator), id(radial_profiles))
-    if cache_key not in _interpolator_cache:
-        _interpolator_cache[cache_key] = (
-            build_magnetic_field_interpolator(equilibrium_interpolator),
-            build_rho_interpolator(equilibrium_interpolator),
-            build_electron_density_profile_interpolator(radial_profiles),
-            build_electron_temperature_profile_interpolator(radial_profiles),
-        )
-    (
-        magnetic_field_interpolator,
-        rho_interpolator,
-        electron_density_profile_interpolator,
-        electron_temperature_profile_interpolator,
-    ) = _interpolator_cache[cache_key]
+
+    # Access cached interpolator properties. These build and cache the interpolators
+    # on first access, then return the same callable objects on subsequent calls.
+    # JAX uses object identity (id()) to cache compiled traces, so returning the
+    # same callable object avoids ~1-2s recompilation overhead.
+    magnetic_field_interpolator = equilibrium_interpolator.magnetic_field_interpolator
+    rho_interpolator = equilibrium_interpolator.rho_interpolator
+    electron_density_profile_interpolator = (
+        radial_profiles.electron_density_interpolator
+    )
+    electron_temperature_profile_interpolator = (
+        radial_profiles.electron_temperature_interpolator
+    )
     # Solve ray tracing equations with augmented state vector
     # This computes all quantities (magnetic field, density, temperature, absorption, power)
     # in a single pass during ODE integration, avoiding expensive post-processing
