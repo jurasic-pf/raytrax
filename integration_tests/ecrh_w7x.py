@@ -254,40 +254,35 @@ def main():
 
         from scipy.interpolate import interp1d
 
-        # Extract TRAVIS data from LCMS onwards
-        travis_pos_from_lcms = travis_result.position_m[travis_lcms_idx:]
-        s_travis_from_lcms = (
-            travis_result.arc_length_m[travis_lcms_idx:] - s_lcms_travis
-        )
-
-        # Align TRAVIS arc length to match raytrax starting point
-        s_travis_aligned = s_travis_from_lcms + s[0]
+        # Use absolute arc length comparison (no LCMS alignment shift)
+        s_travis = travis_result.arc_length_m
+        pos_travis = travis_result.position_m
 
         # Find overlapping arc length region
-        s_min = max(s[0], s_travis_aligned[0])
-        s_max = min(s[-1], s_travis_aligned[-1])
+        s_min = max(s[0], s_travis[0])
+        s_max = min(s[-1], s_travis[-1])
 
         mask_rx = (s >= s_min) & (s <= s_max)
 
         # Interpolate TRAVIS data onto raytrax arc length points
         tr_pos_interp = interp1d(
-            s_travis_aligned,
-            travis_pos_from_lcms,
+            s_travis,
+            pos_travis,
             axis=0,
             kind="linear",
             bounds_error=False,
             fill_value="extrapolate",
         )
         tr_rho_interp = interp1d(
-            s_travis_aligned,
-            travis_result.rho[travis_lcms_idx:],
+            s_travis,
+            travis_result.rho,
             kind="linear",
             bounds_error=False,
             fill_value="extrapolate",
         )
         tr_B_interp = interp1d(
-            s_travis_aligned,
-            travis_result.magnetic_field_magnitude_T[travis_lcms_idx:],
+            s_travis,
+            travis_result.magnetic_field_magnitude_T,
             kind="linear",
             bounds_error=False,
             fill_value="extrapolate",
