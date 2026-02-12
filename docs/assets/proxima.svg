@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   width="215"
+   height="215"
+   version="1.1"
+   id="svg5"
+   sodipodi:docname="proxima.svg"
+   inkscape:version="1.4.2 (ebf0e940d0, 2025-05-08)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:xlink="http://www.w3.org/1999/xlink"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview5"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:zoom="3.9916667"
+     inkscape:cx="300"
+     inkscape:cy="107.59916"
+     inkscape:window-width="3440"
+     inkscape:window-height="1403"
+     inkscape:window-x="0"
+     inkscape:window-y="0"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg5" />
+  <defs
+     id="defs2">
+    <linearGradient
+       id="b"
+       x1="83.569"
+       x2="44.888"
+       y1="102.43"
+       y2="103.86"
+       gradientTransform="matrix(1.0393,0,0,1.0393,29.657,-82.79)"
+       gradientUnits="userSpaceOnUse">
+      <stop
+         stop-color="#2df9c3"
+         offset="0"
+         id="stop1" />
+      <stop
+         stop-color="#1b9d88"
+         offset="1"
+         id="stop2" />
+    </linearGradient>
+  </defs>
+  <path
+     id="a"
+     d="m 60.66,42.21 c 13.885,-17.792 39.523,-34.815 67.282,-30.773 27.509,4.0012 46.05,27.707 54.312,48.461 C 154.506,30.902 97.013,22.017 60.664,42.22 Z"
+     fill="url(#b)"
+     style="fill:url(#b)" />
+  <use
+     transform="rotate(72.007,103.76,106.5)"
+     xlink:href="#a"
+     id="use2" />
+  <use
+     transform="rotate(144,103.76,106.5)"
+     xlink:href="#a"
+     id="use3" />
+  <use
+     transform="rotate(-143.99,103.76,106.51)"
+     xlink:href="#a"
+     id="use4" />
+  <use
+     transform="rotate(-72,103.77,106.49)"
+     xlink:href="#a"
+     id="use5" />
+</svg>
