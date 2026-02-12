@@ -12,9 +12,8 @@ from raytrax.interpolate import (
     build_electron_temperature_profile_interpolator,
     cylindrical_grid_for_equilibrium,
     interpolate_toroidal_to_cylindrical_grid,
-    _map_to_fundamental_domain,
-    _apply_B_stellarator_symmetry,
 )
+from raytrax.solver import _map_to_fundamental_domain, _apply_B_stellarator_symmetry
 from raytrax.types import RadialProfiles
 
 from .fixtures import torus_wout, w7x_wout

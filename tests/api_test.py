@@ -4,7 +4,8 @@ import jax.numpy as jnp
 import numpy as np
 
 from raytrax.api import trace
-from raytrax.types import Beam, RadialProfiles, MagneticConfiguration
+from raytrax.interpolate import MagneticConfiguration
+from raytrax.types import Beam, RadialProfiles
 from tests.fixtures import w7x_wout
 
 
