@@ -2,9 +2,21 @@
 site_name = "Raytrax"
 site_url = "https://proximafusion.github.io/raytrax/"
 docs_dir = "docs"
+nav = [
+    {"Home" = "index.md"},
+    {"Getting Started" = "getting-started.md"},
+    {"Reference" = "api.md"},
+]
+extra_javascript = [
+    "javascripts/mathjax.js",
+    "https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js"
+]
 
 [project.theme]
 name = "zensical"
+features = [
+    "content.code.copy"
+]
 
 [project.plugins.mkdocstrings.handlers.python]
 paths = ["src"]
@@ -13,8 +25,16 @@ paths = ["src"]
 docstring_style = "google"
 show_source = true
 
-[[project.nav]]
-Home = "index.md"
 
-[[project.nav]]
-"Reference" = "api.md"
+[project.markdown_extensions.admonition]
+
+[project.markdown_extensions."pymdownx.highlight"]
+anchor_linenums = true
+line_spans = "__span"
+pygments_lang_class = true
+[project.markdown_extensions."pymdownx.inlinehilite"]
+[project.markdown_extensions."pymdownx.snippets"]
+[project.markdown_extensions."pymdownx.superfences"]
+
+[project.markdown_extensions."pymdownx.arithmatex"]
+generic = true

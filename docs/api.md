@@ -1,3 +1,7 @@
+---
+icon: lucide/file-code
+---
+
 # API Reference
 
 ::: raytrax
