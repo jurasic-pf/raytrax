@@ -6,6 +6,8 @@ field $B$ need to be extrapolated from toroidal coordinates ($\rho$, $\theta$, $
 to cylindrical coordinates ($r$, $\phi$, $z$).
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 
 import interpax
