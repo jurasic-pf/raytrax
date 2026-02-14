@@ -156,7 +156,7 @@ class RadialProfile:
 
 
 @dataclass
-class TracingResult:
+class TraceResult:
     """The result of a ray tracing calculation."""
 
     beam_profile: BeamProfile
@@ -216,5 +216,54 @@ jax.tree_util.register_pytree_node(
         rho=children[1],
         electron_density=children[2],
         electron_temperature=children[3],
+    ),
+)
+
+
+@dataclass(frozen=True)
+class TraceBuffers:
+    """Raw output from the JIT-compiled trace, before trimming padded buffers.
+
+    All arrays are padded to max_steps (4096). Invalid entries beyond the
+    last integration step are inf/NaN and must be trimmed by the caller.
+    """
+
+    arc_length: jt.Float[jax.Array, " nsteps"]
+    ode_state: jt.Float[jax.Array, "nsteps 7"]
+    magnetic_field: jt.Float[jax.Array, "nsteps 3"]
+    normalized_effective_radius: jt.Float[jax.Array, " nsteps"]
+    electron_density: jt.Float[jax.Array, " nsteps"]
+    electron_temperature: jt.Float[jax.Array, " nsteps"]
+    absorption_coefficient: jt.Float[jax.Array, " nsteps"]
+    linear_power_density: jt.Float[jax.Array, " nsteps"]
+    volumetric_power_density: jt.Float[jax.Array, " nsteps"]
+
+
+jax.tree_util.register_pytree_node(
+    TraceBuffers,
+    lambda r: (
+        (
+            r.arc_length,
+            r.ode_state,
+            r.magnetic_field,
+            r.normalized_effective_radius,
+            r.electron_density,
+            r.electron_temperature,
+            r.absorption_coefficient,
+            r.linear_power_density,
+            r.volumetric_power_density,
+        ),
+        None,
+    ),
+    lambda _, children: TraceBuffers(
+        arc_length=children[0],
+        ode_state=children[1],
+        magnetic_field=children[2],
+        normalized_effective_radius=children[3],
+        electron_density=children[4],
+        electron_temperature=children[5],
+        absorption_coefficient=children[6],
+        linear_power_density=children[7],
+        volumetric_power_density=children[8],
     ),
 )

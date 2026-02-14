@@ -72,21 +72,19 @@ def test_ray_tracing():
     rho_1d = jnp.linspace(0, 1, 50)
     dvolume_drho = jnp.ones(50)
 
-    ts, ys, B_all, rho_all, ne_all, te_all, alpha_all, P_all, dP_dV = (
-        solver.trace_jitted(
-            position,
-            direction,
-            setting,
-            interpolators,
-            5,
-            rho_1d,
-            dvolume_drho,
-        )
+    result = solver.trace_jitted(
+        position,
+        direction,
+        setting,
+        interpolators,
+        5,
+        rho_1d,
+        dvolume_drho,
     )
 
-    n = int(jnp.sum(jnp.isfinite(ts)).item())
+    n = int(jnp.sum(jnp.isfinite(result.arc_length)).item())
     assert n > 0
-    assert ys.shape[1] == 7
+    assert result.ode_state.shape[1] == 7
 
 
 def test_quantities_computed_during_solve():
@@ -102,23 +100,23 @@ def test_quantities_computed_during_solve():
     rho_1d = jnp.linspace(0, 1, 50)
     dvolume_drho = jnp.ones(50)
 
-    ts, ys, B_all, rho_all, ne_all, te_all, alpha_all, P_all, dP_dV = (
-        solver.trace_jitted(
-            position,
-            direction,
-            setting,
-            interpolators,
-            5,
-            rho_1d,
-            dvolume_drho,
-        )
+    result = solver.trace_jitted(
+        position,
+        direction,
+        setting,
+        interpolators,
+        5,
+        rho_1d,
+        dvolume_drho,
     )
 
-    n = int(jnp.sum(jnp.isfinite(ts)).item())
+    n = int(jnp.sum(jnp.isfinite(result.arc_length)).item())
     assert n > 0
 
     # Check first valid point has expected values from mock interpolators
-    assert jnp.allclose(B_all[0], jnp.array([10.0, 0.0, 0.0]), atol=0.1)
-    assert jnp.allclose(ne_all[0], jnp.array(0.1), atol=1e-4)
-    assert jnp.allclose(te_all[0], jnp.array(1.0), atol=1e-4)
-    assert jnp.allclose(rho_all[0], jnp.array(0.5), atol=1e-4)
+    assert jnp.allclose(result.magnetic_field[0], jnp.array([10.0, 0.0, 0.0]), atol=0.1)
+    assert jnp.allclose(result.electron_density[0], jnp.array(0.1), atol=1e-4)
+    assert jnp.allclose(result.electron_temperature[0], jnp.array(1.0), atol=1e-4)
+    assert jnp.allclose(
+        result.normalized_effective_radius[0], jnp.array(0.5), atol=1e-4
+    )
