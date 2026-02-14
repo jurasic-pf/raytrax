@@ -17,6 +17,7 @@ extra_javascript = [
 name = "zensical"
 logo = "assets/proxima.svg"
 favicon = "assets/proxima.svg"
+palette.accent = "teal"
 features = [
     "content.code.copy"
 ]
