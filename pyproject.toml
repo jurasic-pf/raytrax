@@ -6,6 +6,9 @@ build-backend = "setuptools.build_meta"
 where = ["src"]
 include = ["raytrax*"]
 
+[tool.setuptools.package-data]
+raytrax = ["data/w7x.json"]
+
 [project]
 name = "raytrax"
 version = "0.0.1"
