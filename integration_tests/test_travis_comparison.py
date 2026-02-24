@@ -162,12 +162,22 @@ def comparison(raytrax_result, travis_reference):
     tau_rx = np.asarray(rx.optical_depth)[-1]
     tau_tr = float(np.asarray(tr.optical_depth)[-1])
 
+    # Exclude sentinel points (antenna start: rho=NaN, B=0) from per-point metrics
+    valid = ~np.isnan(rho_rx) & (B_tr > 0)
+
     # Compute metrics
-    pos_rms_mm = float(np.sqrt(np.mean(np.sum((pos_rx - pos_tr) ** 2, axis=1)))) * 1000
-    B_mean_pct = float(np.mean(np.abs((B_rx - B_tr) / B_tr))) * 100
-    ne_mean_pct = float(np.mean(np.abs((ne_rx - ne_tr) / ne_tr))) * 100
-    te_mean_pct = float(np.mean(np.abs((te_rx - te_tr) / te_tr))) * 100
-    rho_rms = float(np.sqrt(np.mean((rho_rx - rho_tr) ** 2)))
+    pos_rms_mm = (
+        float(np.sqrt(np.mean(np.sum((pos_rx[valid] - pos_tr[valid]) ** 2, axis=1))))
+        * 1000
+    )
+    B_mean_pct = float(np.mean(np.abs((B_rx[valid] - B_tr[valid]) / B_tr[valid]))) * 100
+    ne_mean_pct = (
+        float(np.mean(np.abs((ne_rx[valid] - ne_tr[valid]) / ne_tr[valid]))) * 100
+    )
+    te_mean_pct = (
+        float(np.mean(np.abs((te_rx[valid] - te_tr[valid]) / te_tr[valid]))) * 100
+    )
+    rho_rms = float(np.sqrt(np.mean((rho_rx[valid] - rho_tr[valid]) ** 2)))
     tau_pct = float(abs(tau_rx - tau_tr) / tau_tr) * 100
 
     return {
