@@ -2,7 +2,7 @@
 
 import jax.numpy as jnp
 
-from .interpolate import (
+from .equilibrium.interpolate import (
     build_magnetic_field_interpolator,
     build_rho_interpolator,
     build_electron_density_profile_interpolator,

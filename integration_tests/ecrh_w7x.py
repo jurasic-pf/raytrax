@@ -12,9 +12,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent / "tests"))
 
 from raytrax.api import trace
-from raytrax.interpolate import MagneticConfiguration
+from raytrax.equilibrium.interpolate import MagneticConfiguration
 from raytrax.types import Beam, RadialProfiles
-from raytrax.data import get_w7x_wout
+from raytrax.equilibrium.data import get_w7x_wout
 from travis_wrapper import run_travis, TravisECRHInput, save_reference_data
 
 # Find TRAVIS executable in PATH, or None if not available
@@ -83,7 +83,7 @@ def travis_profile(rho, central_value, a, p, q, h, w):
 
 def find_b0_on_axis(wout):
     """Find |B| on the magnetic axis at phi=0, z=0."""
-    from raytrax.interpolate import (
+    from raytrax.equilibrium.interpolate import (
         build_magnetic_field_interpolator,
         build_rho_interpolator,
     )
@@ -374,7 +374,7 @@ def main():
 
         # Check ρ gradient at edge
         print(f"\nρ gradient test at edge:")
-        from raytrax.interpolate import build_rho_interpolator
+        from raytrax.equilibrium.interpolate import build_rho_interpolator
 
         rho_fn = build_rho_interpolator(eq_interp)
 

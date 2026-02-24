@@ -6,7 +6,8 @@ import jax
 import jax.numpy as jnp
 import jaxtyping as jt
 
-from raytrax import absorption, hamiltonian, ray
+from raytrax import ray
+from raytrax.physics import absorption, hamiltonian
 from raytrax.types import Interpolators, TraceBuffers
 
 

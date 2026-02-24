@@ -8,8 +8,8 @@ import numpy as np
 import pytest
 from vmecpp import VmecWOut
 
-from raytrax.data import get_w7x_wout
-from raytrax.interpolate import MagneticConfiguration
+from raytrax.equilibrium.data import get_w7x_wout
+from raytrax.equilibrium.interpolate import MagneticConfiguration
 
 
 @dataclass
@@ -76,6 +76,12 @@ def torus_wout():
 def w7x_wout():
     """Fixture for the W7-X equilibrium."""
     return get_w7x_wout()
+
+
+@pytest.fixture
+def w7x_magnetic_configuration(w7x_wout):
+    """Fixture for the W7-X magnetic configuration."""
+    return MagneticConfiguration.from_vmec_wout(w7x_wout)
 
 
 @pytest.fixture

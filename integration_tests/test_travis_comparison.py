@@ -11,9 +11,9 @@ from pathlib import Path
 from scipy.interpolate import interp1d
 
 from raytrax.api import trace
-from raytrax.interpolate import MagneticConfiguration
+from raytrax.equilibrium.interpolate import MagneticConfiguration
 from raytrax.types import Beam, RadialProfiles
-from raytrax.data import get_w7x_wout
+from raytrax.equilibrium.data import get_w7x_wout
 from travis_wrapper import load_reference_data
 
 TRAVIS_REF_FILE = Path(__file__).parent / "data" / "travis_w7x_reference.json"
@@ -59,7 +59,7 @@ def travis_profile(rho, central_value, a, p, q, h, w):
 
 
 def find_b0_on_axis(wout):
-    from raytrax.interpolate import (
+    from raytrax.equilibrium.interpolate import (
         build_magnetic_field_interpolator,
         build_rho_interpolator,
     )
