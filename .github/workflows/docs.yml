@@ -19,11 +19,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
+      - name: Install system dependencies
+        run: sudo apt-get install -y libgl1-mesa-glx libegl1-mesa xvfb
       - name: Install dependencies
         run: pip install ".[docs]"
       - name: Generate gallery
         run: |
-          mkdocs build -f mkdocs_gallery.yml
+          xvfb-run -a mkdocs build -f mkdocs_gallery.yml
           python scripts/patch_gallery.py
       - name: Build docs
         run: zensical build --clean
