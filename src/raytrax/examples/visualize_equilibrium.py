@@ -27,13 +27,13 @@ try:
 except ImportError as exc:
     raise ImportError("You must install pyvista to run this example!") from exc
 
-from raytrax.equilibrium.data import get_w7x_wout
+from raytrax.examples import get_w7x_equilibrium
 from raytrax.equilibrium.interpolate import cylindrical_grid_for_equilibrium
 
 if __name__ == "__main__":
     data_dir = Path(__file__).parent
 
-    equilibrium = get_w7x_wout()
+    equilibrium = get_w7x_equilibrium()
 
     # interpolate quantities on cylindrical grid
     cylindrical_grid = cylindrical_grid_for_equilibrium(

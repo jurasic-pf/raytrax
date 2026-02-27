@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from raytrax.api import trace
 from raytrax.equilibrium.interpolate import MagneticConfiguration
 from raytrax.types import Beam, RadialProfiles
-from raytrax.equilibrium.data import get_w7x_wout
+from raytrax.examples import get_w7x_equilibrium as get_w7x_wout
 from raytrax.equilibrium.interpolate import (
     build_magnetic_field_interpolator,
     build_rho_interpolator,

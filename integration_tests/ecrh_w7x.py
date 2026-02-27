@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "tests"))
 from raytrax.api import trace
 from raytrax.equilibrium.interpolate import MagneticConfiguration
 from raytrax.types import Beam, RadialProfiles
-from raytrax.equilibrium.data import get_w7x_wout
+from raytrax.examples import get_w7x_equilibrium as get_w7x_wout
 from travis_wrapper import run_travis, TravisECRHInput, save_reference_data
 
 # Find TRAVIS executable in PATH, or None if not available

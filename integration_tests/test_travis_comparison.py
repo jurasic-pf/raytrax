@@ -13,7 +13,7 @@ from scipy.interpolate import interp1d
 from raytrax.api import trace
 from raytrax.equilibrium.interpolate import MagneticConfiguration
 from raytrax.types import Beam, RadialProfiles
-from raytrax.equilibrium.data import get_w7x_wout
+from raytrax.examples import get_w7x_equilibrium as get_w7x_wout
 from travis_wrapper import load_reference_data
 
 TRAVIS_REF_FILE = Path(__file__).parent / "data" / "travis_w7x_reference.json"
