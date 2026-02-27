@@ -54,12 +54,20 @@ def _bin_power_deposition(
     optical_depth = jnp.where(jnp.isfinite(optical_depth), optical_depth, tau_final)
 
     s_max = jnp.max(jnp.where(jnp.isfinite(arc_length), arc_length, 0.0))
-    arc_length = jnp.where(jnp.isfinite(arc_length), arc_length, s_max + 1.0)
+    # Push padded entries well beyond s_max with *distinct* monotone values.
+    # All-equal padding (s_max + 1) creates duplicate cubic knots that corrupt
+    # the spline within [0, s_max].  Spacing by s_max per slot pushes each
+    # padded knot to 2s_max, 3s_max, … so their influence on [0, s_max] is O(1/k²).
+    arc_length = jnp.where(
+        jnp.isfinite(arc_length),
+        arc_length,
+        s_max * (2.0 + jnp.arange(arc_length.shape[0])),
+    )
 
     # Any finite fill for rho at padded slots — those slots are never queried.
     rho_trajectory = jnp.where(jnp.isfinite(rho_trajectory), rho_trajectory, 0.0)
 
-    # --- 2. Dense linear interpolation along arc length --------------------
+    # --- 2. Dense cubic interpolation along arc length ---------------------
     s_fine = jnp.linspace(arc_length[0], s_max, _N_INTERP)
     rho_fine = interpax.interp1d(s_fine, arc_length, rho_trajectory, method="cubic")
     tau_fine = interpax.interp1d(s_fine, arc_length, optical_depth, method="cubic")
