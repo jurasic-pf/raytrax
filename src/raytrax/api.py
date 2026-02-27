@@ -164,7 +164,7 @@ def trace(
             electron_temperature=result.electron_temperature,
             magnetic_field=result.magnetic_field,
             normalized_effective_radius=result.normalized_effective_radius,
-            linear_power_density=result.linear_power_density,
+            linear_power_density=result.linear_power_density * beam.power,
         )
         # Padded optical_depth entries are inf (diffrax fills unused slots with inf).
         # _bin_power_deposition sanitizes inf before computing dP.
@@ -179,7 +179,7 @@ def trace(
             beam_profile=beam_profile,
             radial_profile=RadialProfile(
                 rho=magnetic_configuration.rho_1d,
-                volumetric_power_density=power_binned,
+                volumetric_power_density=power_binned * beam.power,
             ),
         )
 
@@ -196,7 +196,7 @@ def trace(
         electron_temperature=result.electron_temperature[:n],
         magnetic_field=result.magnetic_field[:n],
         normalized_effective_radius=result.normalized_effective_radius[:n],
-        linear_power_density=result.linear_power_density[:n],
+        linear_power_density=result.linear_power_density[:n] * beam.power,
     )
 
     power_binned = _bin_power_deposition(
@@ -211,6 +211,6 @@ def trace(
         beam_profile=beam_profile,
         radial_profile=RadialProfile(
             rho=magnetic_configuration.rho_1d,
-            volumetric_power_density=power_binned,
+            volumetric_power_density=power_binned * beam.power,
         ),
     )

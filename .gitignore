@@ -170,6 +170,10 @@ venv.bak/
 
 # mkdocs documentation
 /site
+/site_gallery_tmp/
+
+# mkdocs-gallery generated output
+/docs/generated/
 
 # mypy
 .mypy_cache/

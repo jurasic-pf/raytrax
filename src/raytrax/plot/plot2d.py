@@ -4,10 +4,12 @@ from collections import namedtuple
 
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.collections import LineCollection
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 from scipy.interpolate import RegularGridInterpolator
 
 from raytrax.equilibrium.interpolate import MagneticConfiguration
-from raytrax.types import RadialProfiles
+from raytrax.types import BeamProfile, RadialProfiles
 
 RZSlice = namedtuple("RZSlice", ["R", "Z", "B", "rho"])
 
@@ -127,7 +129,9 @@ def plot_electron_density_rz(
 
     cont = ax.contourf(slice_data.R, slice_data.Z, ne_interp, **(defaults | kwargs))
 
-    plt.colorbar(cont, ax=ax, label="$n_e$ [$10^{20}$ m$^{-3}$]")
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes("right", size="5%", pad=0.1)
+    plt.colorbar(cont, cax=cax, label="$n_e$ [$10^{20}$ m$^{-3}$]")
     ax.set_xlabel("R [m]")
     ax.set_ylabel("Z [m]")
     ax.set_aspect("equal")
@@ -151,6 +155,58 @@ def plot_effective_radius_rz(
     }
 
     ax.contour(slice_data.R, slice_data.Z, slice_data.rho, **(defaults | kwargs))
+    ax.set_xlabel("R [m]")
+    ax.set_ylabel("Z [m]")
+    ax.set_aspect("equal")
+
+    return ax
+
+
+def plot_beamtrace_rz(
+    beam_trace: BeamProfile,
+    phi: float,
+    ax=None,
+    add_colorbar: bool = True,
+    **kwargs,
+):
+    """Plot the beam trace in the R-Z plane, coloured by linear power density.
+
+    Args:
+        beam_trace: The traced BeamProfile.
+        phi: Toroidal angle (unused; kept for API consistency).
+        ax: Matplotlib axes. If None, a new figure is created.
+        add_colorbar: If True (default), attach a matched-height colorbar.
+        **kwargs: Passed to LineCollection (e.g. ``lw``, ``label``).
+            ``color`` is ignored since colouring is driven by the power density.
+
+    Returns:
+        The matplotlib axes object.
+    """
+    if ax is None:
+        _, ax = plt.subplots()
+
+    Z = np.array(beam_trace.position[:, 2])
+    x = np.array(beam_trace.position[:, 0])
+    y = np.array(beam_trace.position[:, 1])
+    R = np.sqrt(x**2 + y**2)
+    p = np.array(beam_trace.linear_power_density) / 1e6  # MW/m
+
+    # Build per-segment colour values (midpoint average of adjacent points)
+    points = np.stack([R, Z], axis=1).reshape(-1, 1, 2)
+    segments = np.concatenate([points[:-1], points[1:]], axis=1)
+    p_seg = 0.5 * (p[:-1] + p[1:])
+
+    kwargs.pop("color", None)  # colour is set by cmap
+    lc = LineCollection(segments, cmap="plasma", **kwargs)
+    lc.set_array(p_seg)
+    ax.add_collection(lc)
+    ax.autoscale()
+
+    if add_colorbar:
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes("right", size="5%", pad=0.1)
+        plt.colorbar(lc, cax=cax, label="Linear power density [MW/m]")
+
     ax.set_xlabel("R [m]")
     ax.set_ylabel("Z [m]")
     ax.set_aspect("equal")

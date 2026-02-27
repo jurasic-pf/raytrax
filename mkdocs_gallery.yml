@@ -1,0 +1,23 @@
+# Minimal MkDocs config used only to run mkdocs-gallery as a pre-build step.
+# It generates docs/generated/gallery/ from the scripts in docs/examples/.
+# The actual site is built by zensical (zensical.toml).
+#
+# Run:  mkdocs build -f mkdocs_gallery.yml
+
+site_name: Raytrax
+docs_dir: docs
+site_dir: site_gallery_tmp  # throwaway; zensical builds the real site
+
+# Explicit nav avoids MkDocs auto-generating a nav from docs/ which can produce
+# None-valued section entries that mkdocs-gallery's fill_mkdocs_nav cannot handle.
+nav:
+  - Visualization: generated/gallery/
+
+plugins:
+  - gallery:
+      examples_dirs:
+        - docs/examples
+      gallery_dirs:
+        - docs/generated/gallery
+      download_all_examples: false
+      show_signature: false

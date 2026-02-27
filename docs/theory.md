@@ -2,6 +2,8 @@
 icon: lucide/orbit
 ---
 
+# Theory: Overview
+
 Raytrax solves the ray equations of microwave rays employed for electron cyclotron resonance heating of magnetic confinement fusion plasmas. With peak magnetic flux densities of several Teslas, electron cyclotron resonance frequencies are in the range of hundreds of GHz and corresponding wave lengths of the order of millimeters. As the length scales of variation of density and temperature are typically much larger, the use of the **geometrical optics** (GO) approximation (sometimes called WKB approximation in analogy with quantum mechanics) is justified.
 
 

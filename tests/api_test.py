@@ -88,6 +88,7 @@ def test_trace_w7x_beam(w7x_wout):
         direction=direction,
         frequency=140e9,
         mode="O",
+        power=1e6,
     )
 
     interpolator = MagneticConfiguration.from_vmec_wout(w7x_wout)

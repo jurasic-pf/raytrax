@@ -169,6 +169,7 @@ def main():
         direction=jnp.array(direction),
         frequency=jnp.array(140e9),
         mode="O",
+        power=1e6,
     )
 
     # Run TRAVIS

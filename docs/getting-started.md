@@ -54,7 +54,7 @@ profiles = raytrax.RadialProfiles(
 )
 ```
 
-The **beam settings** define the properties of the microwave beam to be traced: its starting position (a vector in Cartesian coordinates), initial direction (a unit 3-vector), frequency (in Hz, not GHz!), and wave mode (ordinary or extraordinary mode). Example:
+The **beam settings** define the properties of the microwave beam to be traced: its starting position (a vector in Cartesian coordinates), initial direction (a unit 3-vector), frequency (in Hz, not GHz!), wave mode (ordinary or extraordinary mode), and initial power (in W). Example:
 
 ```python
 import raytrax, jax.numpy as jnp
@@ -64,6 +64,7 @@ beam = raytrax.Beam(
     direction=jnp.array([0.0, -1.0, 0.0]),
     frequency=140e9,  # Hz!
     mode="O",
+    power=1e6,  # W
 )
 ```
 

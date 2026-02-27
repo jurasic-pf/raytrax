@@ -24,7 +24,7 @@ def plot_radial_electron_density(radial_profiles: RadialProfiles, ax=None):
 
     ax.plot(rho, ne)
     ax.set_xlabel(r"$\rho$")
-    ax.set_ylabel("Electron Density [10$^{20} m$^{-3}$]")
+    ax.set_ylabel("Electron Density [10$^{20}$ m$^{-3}$]")
     ax.set_xlim(0, 1)
     ax.grid(True, alpha=0.3)
 

@@ -108,6 +108,9 @@ class Beam:
     mode: Literal["X", "O"]
     """The polarization mode of the beam, either `"X"` for extraordinary or `"O"` for ordinary mode."""
 
+    power: float
+    """The initial power of the beam in W (not MW!)."""
+
 
 @dataclass
 class BeamProfile:

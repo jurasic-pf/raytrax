@@ -113,6 +113,7 @@ def setup_w7x_scenario():
         direction=jnp.array(direction),
         frequency=jnp.array(140e9),
         mode="O",
+        power=1e6,
     )
 
     return eq, profiles, beam
@@ -189,6 +190,7 @@ def main():
         direction=jnp.array(direction),
         frequency=jnp.array(140e9),
         mode="O",
+        power=1e6,
     )
 
     t_setup_total = time.perf_counter() - t0_total
