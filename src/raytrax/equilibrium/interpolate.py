@@ -36,7 +36,7 @@ class MagneticConfiguration(SafetensorsMixin):
     """
 
     rphiz: jt.Float[jax.Array, "npoints 3"]
-    """The ($R$, $\phi$, $Z$) coordinates of the points on the interpolation grid."""
+    r"""The ($R$, $\phi$, $Z$) coordinates of the points on the interpolation grid."""
 
     magnetic_field: jt.Float[jax.Array, "npoints 3"]
     r"""The magnetic field $(B_R, B_\phi, B_Z)$ in cylindrical components at each grid point."""
