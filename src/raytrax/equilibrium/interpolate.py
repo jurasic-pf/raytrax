@@ -28,18 +28,18 @@ from raytrax.types import RadialProfiles, SafetensorsMixin, WoutLike
 
 @dataclass
 class MagneticConfiguration(SafetensorsMixin):
-    """Magnetic configuration and geometry on a cylindrical grid.
+    r"""Magnetic configuration and geometry on a cylindrical grid.
 
-    Contains the magnetic field B and normalized effective radius rho on a
-    3D cylindrical grid (R, phi, Z), along with volume information for
+    Contains the magnetic field $\boldsymbol{B}$ and normalized effective radius $\rho$ on a
+    3D cylindrical grid ($R$, $\phi$, $Z$), along with volume information for
     computing deposition profiles.
     """
 
     rphiz: jt.Float[jax.Array, "npoints 3"]
-    """The (R, phi, Z) coordinates of the points on the interpolation grid."""
+    """The ($R$, $\phi$, $Z$) coordinates of the points on the interpolation grid."""
 
     magnetic_field: jt.Float[jax.Array, "npoints 3"]
-    """The magnetic field (B_R, B_phi, B_Z) in cylindrical components at each grid point."""
+    r"""The magnetic field $(B_R, B_\phi, B_Z)$ in cylindrical components at each grid point."""
 
     rho: jt.Float[jax.Array, "npoints"]
     """The normalized effective minor radius at each point on the interpolation grid."""
@@ -54,7 +54,7 @@ class MagneticConfiguration(SafetensorsMixin):
     """1D radial grid for volume derivative."""
 
     dvolume_drho: jt.Float[jax.Array, "nrho_1d"]
-    """Volume derivative dV/drho on the 1D radial grid."""
+    r"""Volume derivative $dV/d\rho$ on the 1D radial grid."""
 
     is_axisymmetric: bool = False
     """Whether the configuration is axisymmetric (tokamak) or 3D (stellarator)."""
@@ -65,7 +65,10 @@ class MagneticConfiguration(SafetensorsMixin):
         equilibrium: WoutLike,
         magnetic_field_scale: float = 1.0,
     ) -> MagneticConfiguration:
-        """Generate interpolators for the given MHD equilibrium.
+        """Create a MagneticConfiguration from a VMEC++ equilibrium.
+
+        Optionally, apply a uniform scale factor to the magnetic field magnitude
+        with respect to the equilibrium data.
 
         Args:
             equilibrium: an MHD equilibrium compatible with `vmecpp.VmecWOut`

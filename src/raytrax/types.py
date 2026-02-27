@@ -94,24 +94,24 @@ class WoutLike(Protocol):
 
 @dataclass
 class Beam:
-    """Dataclass for a beam to be traced."""
+    """Beam parameter inputs for tracing."""
 
     position: jt.Float[jax.Array, "3"]
     """The starting position of the beam in cartesian coordinates."""
 
     direction: jt.Float[jax.Array, "3"]
-    """The starting direction of the beam in cartesian coordinates."""
+    """The starting direction of the beam in cartesian coordinates. Must be a unit vector."""
 
     frequency: jt.Float[jax.Array, ""]
-    """The frequency of the beam in Hz."""
+    """The frequency of the beam in Hz (not GHz!)."""
 
     mode: Literal["X", "O"]
-    """The polarization mode of the beam, either 'X' or 'O'."""
+    """The polarization mode of the beam, either `"X"` for extraordinary or `"O"` for ordinary mode."""
 
 
 @dataclass
 class BeamProfile:
-    """Dataclass for a traced beam profile."""
+    """Beam profile in real space resulting from tracing."""
 
     position: jt.Float[jax.Array, "npoints 3"]
     """The position of the beam in cartesian coordinates."""
@@ -120,7 +120,7 @@ class BeamProfile:
     """The arc length along the beam."""
 
     refractive_index: jt.Float[jax.Array, "npoints 3"]
-    """The refractive index at each point along the beam."""
+    """The refractive index vector at each point along the beam."""
 
     optical_depth: jt.Float[jax.Array, "npoints"]
     """The optical depth along the beam."""
@@ -129,7 +129,7 @@ class BeamProfile:
     """The absorption coefficient along the beam."""
 
     electron_density: jt.Float[jax.Array, "npoints"]
-    """The electron density along the beam in units of 10^20 m^-3."""
+    """The electron density along the beam in units of $10^{20}$ m$^{-3}."""
 
     electron_temperature: jt.Float[jax.Array, "npoints"]
     """The electron temperature along the beam in keV."""
@@ -138,7 +138,7 @@ class BeamProfile:
     """The magnetic field vector along the beam in T."""
 
     normalized_effective_radius: jt.Float[jax.Array, "npoints"]
-    """The normalized effective minor radius (rho) along the beam."""
+    r"""The normalized effective minor radius $\rho$ along the beam."""
 
     linear_power_density: jt.Float[jax.Array, "npoints"]
     """The linear power density along the beam."""
@@ -146,7 +146,7 @@ class BeamProfile:
 
 @dataclass
 class RadialProfile:
-    """The deposition profile projected onto the radial coordinate."""
+    """Beam profile in radial coordinates."""
 
     rho: jt.Float[jax.Array, "npoints"]
     """The normalized effective minor radius."""
@@ -160,7 +160,7 @@ class TraceResult:
     """The result of a ray tracing calculation."""
 
     beam_profile: BeamProfile
-    """The traced beam profile."""
+    """The traced beam profile in real space."""
 
     radial_profile: RadialProfile
     """The radial deposition profile."""
@@ -168,17 +168,17 @@ class TraceResult:
 
 @dataclass
 class RadialProfiles:
-    """Radial profiles of electron density and temperature.
+    r"""Radial profiles of electron density and temperature.
 
-    Defines the plasma parameters (density, temperature) as functions of the
-    normalized effective radius rho.
+    Defines the plasma parameters (electron density, temperature) as functions of the
+    normalized effective radius $\rho$.
     """
 
     rho: jt.Float[jax.Array, "nrho"]
     """The normalized effective minor radius grid."""
 
     electron_density: jt.Float[jax.Array, "nrho"]
-    """The electron density profile in units of 10^20 m^-3."""
+    """The electron density profile in units of $10^{20}$ m$^{-3}$."""
 
     electron_temperature: jt.Float[jax.Array, "nrho"]
     """The electron temperature profile in keV."""

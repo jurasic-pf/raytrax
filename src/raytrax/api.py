@@ -141,18 +141,10 @@ def trace(
     Args:
         magnetic_configuration: Magnetic configuration with gridded data
         radial_profiles: Radial profiles of plasma parameters
-        beam: Beam initial conditions (position, direction, frequency, mode)
-        trim: If True (default), trim the output to the valid trajectory length.
-            Set trim=False for gradient-based optimization. The returned
-            BeamProfile then contains padded arrays (4097 slots) that are fully
-            differentiable w.r.t. beam.position and beam.direction. Padded
-            entries have linear_power_density=0 and optical_depth=inf
-            (diffrax fills unused buffer slots with inf). Loss functions like::
-
-                jnp.max(jnp.where(jnp.isfinite(od), od, 0.0))
-                jnp.sum(result.beam_profile.linear_power_density * weights)
-
-            give the correct answer without trimming.
+        beam: Beam initial conditions
+        trim: If `True` (default), trim the output to the valid trajectory length.
+            Set this to `False` when using automatic differentiation.
+            Note: this parameter may be removed in a future release.
 
     Returns:
         TraceResult with beam profile and radial deposition profile.

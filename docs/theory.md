@@ -53,3 +53,7 @@ The main outputs of raytrax are the **ray trajectory** $\boldsymbol{r}(s)$, wher
 The inputs are the **magnetic field** $\boldsymbol{B}(\boldsymbol{r})$, **electron density** $n_e(\boldsymbol{r})$, and **temperature** $T(\boldsymbol{r})$, which together determine the dielectric tensor $\boldsymbol{\varepsilon}$.
 
 Additionally, the initial conditions for the ray (initial position $\boldsymbol{r}_0$ and direction $\hat{\boldsymbol{s}}_0$) and the wave frequency $\omega$ are required.
+
+## Conventions
+
+Throughout the documentation and code, we use the **normalized effective (minor) radius** $\rho$ defined as the square root of the normalized toroidal flux, $\rho = \sqrt{\psi/\psi_\text{edge}}$, where $\psi$ is the toroidal flux and $\psi_\text{edge}$ is its value at the plasma edge.
