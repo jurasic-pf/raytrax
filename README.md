@@ -20,12 +20,14 @@ python -m pip install raytrax
 
 The development of Raytrax is a collaboration between [Proxima Fusion](https://www.proximafusion.com) and the [Munich University of Applied Sciences (HM)](https://www.hm.edu) and was partially supported by the German Federal Ministry of Research, Technology and Space (BMFTR) under grant FPP-MC (13F1001B).
 
-<div style="display: flex; gap: 2rem; align-items: center; justify-content: center; margin-top: 2rem;">
-<img src="https://upload.wikimedia.org/wikipedia/commons/d/d3/Logo_Proxima_Fusion.svg" alt="Proxima Fusion" width="200"/>
-<img src="https://upload.wikimedia.org/wikipedia/de/1/1e/Hochschule_f%C3%BCr_angewandte_Wissenschaften_M%C3%BCnchen_logo.svg" alt="HM" width="160"/>
-<img src="docs/assets/bmftr.svg" alt="BMFTR" width="200"/>
+<div align="center">
+  <img src="https://upload.wikimedia.org/wikipedia/commons/d/d3/Logo_Proxima_Fusion.svg" alt="Proxima Fusion" width="200"/>
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="https://upload.wikimedia.org/wikipedia/de/1/1e/Hochschule_f%C3%BCr_angewandte_Wissenschaften_M%C3%BCnchen_logo.svg" alt="HM" width="160"/>
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="docs/assets/bmftr.svg" alt="BMFTR" width="200"/>
 </div>
 
 ## License
 
-Raytrax is released under the MIT License. See [LICENSE](LICENSE.md) for details.
+Raytrax is released under the MIT License. See [LICENSE.md](LICENSE.md) for details.
