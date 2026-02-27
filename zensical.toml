@@ -7,6 +7,8 @@ nav = [
     {"Home" = "index.md"},
     {"Usage" = [
         {"Get Started" = "getting-started.md"},
+        {"Equilibrium" = "equilibrium.md"},
+
     ]},
     {"Theory" = [
         {"Overview" = "theory.md"},
@@ -38,6 +40,7 @@ features = [
     "content.code.copy",
     "navigation.sections",
     "navigation.footer",
+    "toc.follow",
 ]
 
 [project.plugins.mkdocstrings.handlers.python]
@@ -46,6 +49,10 @@ paths = ["src"]
 [project.plugins.mkdocstrings.handlers.python.options]
 docstring_style = "google"
 show_source = true
+extensions = ["dataclasses"]
+
+[project.markdown_extensions.toc]
+toc_depth = 3
 
 
 [project.markdown_extensions.admonition]
