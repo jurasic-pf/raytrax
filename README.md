@@ -4,7 +4,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Python ≥ 3.11](https://img.shields.io/badge/python-%E2%89%A53.11-blue)](https://www.python.org/)
-[![Documentation](https://img.shields.io/badge/docs-latest-informational)](https://didactic-memory-qm87kjk.pages.github.io/)
+[![Documentation](https://img.shields.io/badge/docs-latest-informational)](https://proximafusion.github.io/raytrax/)
 
 Raytrax is a Python library for simulating Electron Cyclotron Resonance Heating (ECRH) of magnetic confinement fusion plasmas. Powered by [JAX](https://docs.jax.dev), it features fast JIT-compiled computation and automatic differentiation for gradient-based optimization.
 
