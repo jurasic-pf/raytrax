@@ -9,6 +9,10 @@ to cylindrical coordinates ($r$, $\phi$, $z$).
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import pyvista as pv
 
 import interpax
 import jax
@@ -18,12 +22,13 @@ import numpy as np
 from beartype import beartype as typechecker
 from scipy.interpolate import griddata
 
+from raytrax.types import RadialProfiles, SafetensorsMixin, WoutLike
+
+from .fourier import dvolume_drho as compute_dvolume_drho
 from .fourier import (
-    dvolume_drho as compute_dvolume_drho,
     evaluate_magnetic_field_on_toroidal_grid,
     evaluate_rphiz_on_toroidal_grid,
 )
-from raytrax.types import RadialProfiles, SafetensorsMixin, WoutLike
 
 
 @dataclass
@@ -99,6 +104,36 @@ class MagneticConfiguration(SafetensorsMixin):
             rho_1d=rho_1d,
             dvolume_drho=dv_drho,
         )
+
+    def to_pyvista_grid(self) -> pv.StructuredGrid:
+        """Convert to a PyVista StructuredGrid in Cartesian coordinates.
+
+        Point arrays written:
+
+        - ``rho``: normalised effective minor radius (NaN outside LCFS)
+        - ``B``: magnetic field vector :math:`(B_R, B_\\phi, B_Z)` in T
+        - ``absB``: magnetic field magnitude :math:`|\\boldsymbol{B}|` in T
+
+        Requires the ``pyvista`` package.
+
+        Returns:
+            A :class:`pyvista.StructuredGrid` that can be visualised or saved
+            directly via ``.save("output.vts")``.
+        """
+        import pyvista as pv
+
+        rphiz = np.array(self.rphiz)
+        R, phi, Z = rphiz[..., 0], rphiz[..., 1], rphiz[..., 2]
+
+        B = np.array(self.magnetic_field)
+        rho = np.array(self.rho)
+
+        grid = pv.StructuredGrid(R * np.cos(phi), R * np.sin(phi), Z)
+        grid["rho"] = rho.flatten(order="F")  # NaN outside LCFS
+        grid["B"] = B.reshape(-1, 3, order="F")
+        grid["absB"] = np.linalg.norm(B, axis=-1).flatten(order="F")
+
+        return grid
 
 
 @jt.jaxtyped(typechecker=typechecker)

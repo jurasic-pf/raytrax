@@ -16,6 +16,26 @@ from ..fixtures import w7x_magnetic_configuration, w7x_wout
 pytest.importorskip("pyvista")
 
 
+def test_to_pyvista_grid_has_expected_arrays(w7x_magnetic_configuration):
+    """to_pyvista_grid returns a StructuredGrid with rho, B, and absB arrays."""
+    grid = w7x_magnetic_configuration.to_pyvista_grid()
+    assert "rho" in grid.point_data
+    assert "B" in grid.point_data
+    assert "absB" in grid.point_data
+
+
+def test_to_pyvista_grid_can_be_saved(w7x_magnetic_configuration, tmp_path):
+    """to_pyvista_grid().save() writes a readable .vts file."""
+    import pyvista as pv
+
+    out = tmp_path / "test.vts"
+    w7x_magnetic_configuration.to_pyvista_grid().save(out)
+
+    assert out.exists()
+    grid = pv.read(out)
+    assert "rho" in grid.point_data
+
+
 def test_plot_flux_surface_3d_w7x(w7x_magnetic_configuration):
     """Test that plot_flux_surface_3d works with W7-X configuration."""
     plotter = plot_flux_surface_3d(w7x_magnetic_configuration, rho_value=1.0)

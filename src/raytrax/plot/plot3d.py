@@ -14,9 +14,6 @@ def plot_flux_surface_3d(
 ):
     """Plot a 3D flux surface using PyVista.
 
-    PyVista can work directly with structured grids in curvilinear coordinates,
-    avoiding the need to interpolate onto a regular Cartesian grid.
-
     Args:
         magnetic_configuration: The magnetic configuration object.
         rho_value: The value of rho to plot (default: 1.0 for LCFS).
@@ -28,37 +25,19 @@ def plot_flux_surface_3d(
     """
     import pyvista as pv
 
-    # Get the 3D grid data
-    rphiz = np.array(magnetic_configuration.rphiz)
-    rho_3d = np.array(magnetic_configuration.rho).copy()
+    grid = magnetic_configuration.to_pyvista_grid()
 
-    # Extract cylindrical coordinates
-    R = rphiz[..., 0]
-    phi = rphiz[..., 1]
-    Z = rphiz[..., 2]
+    rho = grid["rho"].copy()
+    rho[~np.isfinite(rho)] = rho_value + 0.5
+    grid["rho"] = rho
 
-    # Convert to Cartesian coordinates
-    X = R * np.cos(phi)
-    Y = R * np.sin(phi)
-
-    # Replace NaN values
-    mask = np.isnan(rho_3d)
-    rho_3d[mask] = rho_value + 0.5
-
-    # Create structured grid - PyVista can handle this directly!
-    grid = pv.StructuredGrid(X, Y, Z)
-    grid["rho"] = rho_3d.flatten(order="F")  # Fortran order for structured grids
-
-    # Extract isosurface at the desired rho value
     contour = grid.contour(isosurfaces=[rho_value], scalars="rho")
 
-    # Create plotter if not provided
     if plotter is None:
         plotter = pv.Plotter(notebook=True)
         plotter.add_axes()
         plotter.view_isometric()
 
-    # Default mesh styling
     mesh_kwargs = {"color": "lightblue", "opacity": 0.8, "smooth_shading": True}
     mesh_kwargs.update(kwargs)
 
@@ -92,32 +71,25 @@ def plot_b_surface_3d(
     """
     import pyvista as pv
 
-    rphiz = np.array(magnetic_configuration.rphiz)
-    B_mag = np.linalg.norm(np.array(magnetic_configuration.magnetic_field), axis=-1)
-    rho_3d = np.array(magnetic_configuration.rho)
+    grid = magnetic_configuration.to_pyvista_grid()
 
-    R = rphiz[..., 0]
-    phi = rphiz[..., 1]
-    Z = rphiz[..., 2]
+    # Fill NaN values so clip_scalar and contour work correctly:
+    # rho=2.0 → outside-LCFS cells are removed by clip_scalar(value=1.0)
+    # absB=0.0 → safely below any realistic b_value, so those cells are inert
+    rho = grid["rho"].copy()
+    rho[~np.isfinite(rho)] = 2.0
+    grid["rho"] = rho
 
-    X = R * np.cos(phi)
-    Y = R * np.sin(phi)
-
-    # Fill NaN rho and B values (grid points outside the VMEC domain).
-    rho_fill = np.where(np.isfinite(rho_3d), rho_3d, 2.0)
-    # 0 T is safely below any realistic b_value — NaN B cells are inert.
-    B_safe = np.where(np.isfinite(B_mag), B_mag, 0.0)
-
-    grid = pv.StructuredGrid(X, Y, Z)
-    grid["rho"] = rho_fill.flatten(order="F")
-    grid["B"] = B_safe.flatten(order="F")
+    absB = grid["absB"].copy()
+    absB[~np.isfinite(absB)] = 0.0
+    grid["absB"] = absB
 
     # clip_scalar cuts along rho=1 and interpolates scalar values at the cut,
     # unlike threshold which only removes whole cells.  After clipping, the B
     # isosurface terminates naturally at the LCFS edge without an artificial cap.
     # invert=True: clip (remove) values above 1.0, keeping rho < 1 (inside plasma)
     inside = grid.clip_scalar(scalars="rho", invert=True, value=1.0)
-    contour = inside.contour(isosurfaces=[b_value], scalars="B")
+    contour = inside.contour(isosurfaces=[b_value], scalars="absB")
     # Taubin smoothing removes faceting from the coarse cylindrical grid without
     # shrinking the surface (unlike Laplacian smoothing).
     contour = contour.smooth_taubin(n_iter=50, pass_band=0.1)
