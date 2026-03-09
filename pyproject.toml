@@ -70,7 +70,6 @@ ignore = [
 ]
 "docs/examples/**" = ["E402"]     # example scripts intentionally set up env before imports
 "integration_tests/**" = ["E402"] # same reason
-"src/raytrax/__init__.py" = ["E402"]  # JAX config must run before submodule imports
 
 [tool.ruff.lint.isort]
 known-first-party = ["raytrax"]
