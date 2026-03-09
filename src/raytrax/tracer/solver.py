@@ -165,25 +165,25 @@ def _right_hand_side(
     def eval_rho(pos):
         return _eval_rho(pos, interpolators, nfp)
 
-    # Compute both Hamiltonian gradients in a single backward pass
-    hamiltonian_gradient_r, hamiltonian_gradient_n = hamiltonian.hamiltonian_gradients(
-        state.position,
-        state.refractive_index,
-        eval_B,
-        eval_rho,
-        interpolators.electron_density,
-        setting.frequency,
-        setting.mode,
+    # Compute both Hamiltonian gradients in a single backward pass,
+    # reusing B-field, rho, and ne from the forward pass (has_aux=True).
+    (hamiltonian_gradient_r, hamiltonian_gradient_n), (mag, rho, ne) = (
+        hamiltonian.hamiltonian_gradients_with_aux(
+            state.position,
+            state.refractive_index,
+            eval_B,
+            eval_rho,
+            interpolators.electron_density,
+            setting.frequency,
+            setting.mode,
+        )
     )
     norm = jnp.linalg.norm(hamiltonian_gradient_n)
 
     dr_ds = hamiltonian_gradient_n / norm
     dn_ds = -hamiltonian_gradient_r / norm
 
-    rho = eval_rho(state.position)
-    ne = interpolators.electron_density(rho)
     te = interpolators.electron_temperature(rho)
-    mag = eval_B(state.position)
     dtau_ds = absorption.absorption_coefficient_conditional(
         refractive_index=state.refractive_index,
         magnetic_field=mag,

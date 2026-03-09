@@ -77,6 +77,55 @@ to computing each gradient separately.
 """
 
 
+def _hamiltonian_with_aux(
+    position: Float[jax.Array, "3"],
+    refractive_index: Float[jax.Array, "3"],
+    magnetic_field_interpolator: Callable[
+        [Float[jax.Array, "3"]], Float[jax.Array, "3"]
+    ],
+    rho_interpolator: Callable[[Float[jax.Array, "3"]], Float[jax.Array, ""]],
+    electron_density_profile_interpolator: Callable[
+        [Float[jax.Array, ""]], Float[jax.Array, ""]
+    ],
+    frequency: Float[jax.Array, ""],
+    mode: Literal["X", "O"],
+) -> tuple[
+    Float[jax.Array, ""],
+    tuple[Float[jax.Array, "3"], Float[jax.Array, ""], Float[jax.Array, ""]],
+]:
+    """Hamiltonian that also returns (B, rho, ne) as auxiliary outputs.
+
+    Used with ``jax.grad(..., has_aux=True)`` so that the forward-pass
+    intermediates are available without redundant interpolator calls.
+    """
+    magnetic_field = magnetic_field_interpolator(position)
+    rho = rho_interpolator(position)
+    electron_density_1e20_per_m3 = electron_density_profile_interpolator(rho)
+    H = jax.lax.cond(
+        electron_density_1e20_per_m3 < 1e-6,
+        lambda: _hamiltonian_vacuum(refractive_index=refractive_index),
+        lambda: _hamiltonian_cold(
+            refractive_index=refractive_index,
+            magnetic_field=magnetic_field,
+            electron_density_1e20_per_m3=electron_density_1e20_per_m3,
+            frequency=frequency,
+            mode=mode,
+        ),
+    )
+    return H, (magnetic_field, rho, electron_density_1e20_per_m3)
+
+
+hamiltonian_gradients_with_aux = jax.grad(
+    _hamiltonian_with_aux, argnums=(0, 1), has_aux=True
+)
+r"""Like :data:`hamiltonian_gradients` but also returns forward-pass intermediates.
+
+Returns ``((grad_r, grad_n), (magnetic_field, rho, electron_density))`` in a
+single forward+backward pass, eliminating the need to re-evaluate the B-field
+and rho interpolators after computing the Hamiltonian gradients.
+"""
+
+
 def _hamiltonian_vacuum(
     refractive_index: Float[jax.Array, "3"],
 ) -> Float[jax.Array, ""]:
