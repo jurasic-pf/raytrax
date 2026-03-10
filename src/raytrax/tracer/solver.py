@@ -167,7 +167,7 @@ def _right_hand_side(
 
     # Compute both Hamiltonian gradients in a single backward pass,
     # reusing B-field, rho, and ne from the forward pass (has_aux=True).
-    (hamiltonian_gradient_r, hamiltonian_gradient_n), (mag, rho, ne) = (
+    (hamiltonian_gradient_r, hamiltonian_gradient_n), hamiltonian_aux = (
         hamiltonian.hamiltonian_gradients(
             state.position,
             state.refractive_index,
@@ -183,11 +183,11 @@ def _right_hand_side(
     dr_ds = hamiltonian_gradient_n / norm
     dn_ds = -hamiltonian_gradient_r / norm
 
-    te = interpolators.electron_temperature(rho)
+    te = interpolators.electron_temperature(hamiltonian_aux.rho)
     dtau_ds = absorption.absorption_coefficient_conditional(
         refractive_index=state.refractive_index,
-        magnetic_field=mag,
-        electron_density_1e20_per_m3=ne,
+        magnetic_field=hamiltonian_aux.magnetic_field,
+        electron_density_1e20_per_m3=hamiltonian_aux.electron_density_1e20_per_m3,
         electron_temperature_keV=te,
         frequency=setting.frequency,
         mode=setting.mode,

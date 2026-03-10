@@ -1,13 +1,21 @@
 """Cold plasma ray-tracing Hamiltonian and its gradients ∂H/∂r, ∂H/∂N."""
 
 from collections.abc import Callable
-from typing import Literal
+from typing import Literal, NamedTuple
 
 import jax
 import jax.numpy as jnp
 from jaxtyping import Float
 
 from raytrax.physics import dispersion, quantities
+
+
+class HamiltonianAux(NamedTuple):
+    """Auxiliary quantities computed alongside the Hamiltonian value."""
+
+    magnetic_field: Float[jax.Array, "3"]
+    rho: Float[jax.Array, ""]
+    electron_density_1e20_per_m3: Float[jax.Array, ""]
 
 
 def hamiltonian(
@@ -24,7 +32,7 @@ def hamiltonian(
     mode: Literal["X", "O"],
 ) -> tuple[
     Float[jax.Array, ""],
-    tuple[Float[jax.Array, "3"], Float[jax.Array, ""], Float[jax.Array, ""]],
+    HamiltonianAux,
 ]:
     r"""Ray-tracing Hamiltonian $\mathcal{H}(\boldsymbol{r}, \boldsymbol{n}) = |\boldsymbol{n}|^2 - n_\mathrm{AH}^2(\boldsymbol{r}, \boldsymbol{n})$.
 
@@ -64,7 +72,11 @@ def hamiltonian(
             mode=mode,
         ),
     )
-    return H, (magnetic_field, rho, electron_density_1e20_per_m3)
+    return H, HamiltonianAux(
+        magnetic_field=magnetic_field,
+        rho=rho,
+        electron_density_1e20_per_m3=electron_density_1e20_per_m3,
+    )
 
 
 hamiltonian_gradients = jax.grad(hamiltonian, argnums=(0, 1), has_aux=True)
@@ -74,12 +86,13 @@ Signature mirrors `hamiltonian`: `(position, refractive_index,
 magnetic_field_interpolator, rho_interpolator,
 electron_density_profile_interpolator, frequency, mode)`.
 
-Returns a tuple ``((grad_r, grad_n), (magnetic_field, rho, electron_density))``
+Returns a tuple ``((grad_r, grad_n), HamiltonianAux(...))``
 where $\partial \mathcal{H}/\partial \boldsymbol{r}$
 and $\partial \mathcal{H}/\partial \boldsymbol{n}$ are computed in one shared
 forward+backward pass, halving the number of B-interpolator evaluations compared
 to computing each gradient separately.
-The internally computed quantities (magnetic_field, rho, electron_density) are
+The internally computed quantities (`magnetic_field`, `rho`,
+`electron_density_1e20_per_m3`) are
 returned as aux data, which is not differentiated.
 """
 
