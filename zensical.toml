@@ -43,7 +43,6 @@ extra_javascript = [
 name = "zensical"
 logo = "assets/proxima.svg"
 favicon = "assets/proxima.svg"
-palette.accent = "teal"
 features = [
     "content.code.copy",
     "navigation.sections",
@@ -51,6 +50,30 @@ features = [
     "toc.follow",
     "navigation.indexes",
 ]
+
+# Palette toggle for automatic mode
+[[project.theme.palette]]
+media = "(prefers-color-scheme)"
+accent = "teal"
+toggle.icon = "lucide/sun-moon"
+toggle.name = "Switch to light mode"
+
+# Palette toggle for light mode
+[[project.theme.palette]]
+media = "(prefers-color-scheme: light)"
+scheme = "default"
+accent = "teal"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to dark mode"
+
+# Palette toggle for dark mode
+[[project.theme.palette]]
+media = "(prefers-color-scheme: dark)"
+scheme = "slate"
+accent = "teal"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to system preference"
+
 
 [project.plugins.mkdocstrings.handlers.python]
 paths = ["src"]
