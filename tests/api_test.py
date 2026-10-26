@@ -1,5 +1,8 @@
 """Tests for the raytrax.api module."""
 
+import functools
+
+import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -163,8 +166,9 @@ def test_step_limit_is_reported_instead_of_silently_truncating(
     assert bool(truncated.step_limit_reached)
     assert truncated.beam_profile.arc_length.shape == (17,)
 
-    padded = trace(
-        tokamak_magnetic_configuration, profiles, beam, trim=False, settings=short
+    # trim=False must stay traceable: the flag is a traced array, not a Python bool.
+    padded = jax.jit(functools.partial(trace, trim=False, settings=short))(
+        tokamak_magnetic_configuration, profiles, beam
     )
     assert bool(padded.step_limit_reached)
 
