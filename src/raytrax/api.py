@@ -1,5 +1,7 @@
 """Main functions to interact with Raytrax."""
 
+import warnings
+
 import interpax
 import jax
 import jax.numpy as jnp
@@ -208,11 +210,17 @@ def trace(
         trim: If `True` (default), trim the output to the valid trajectory length.
             Set this to `False` when using automatic differentiation.
             Note: this parameter may be removed in a future release.
-        settings: ODE solver settings (tolerances, step sizes, termination
-            thresholds). Defaults to :class:`TracerSettings` with sensible values.
+        settings: ODE solver settings (tolerances, step sizes, step budget,
+            termination thresholds). Defaults to :class:`TracerSettings` with
+            sensible values.
 
     Returns:
         TraceResult with beam profile and radial deposition profile.
+
+    Warns:
+        RuntimeWarning: If `trim=True` and the solver ran out of steps before the
+            ray terminated. With `trim=False` only `TraceResult.step_limit_reached`
+            is set, so the call stays traceable under `jax.jit` and `jax.grad`.
     """
     result, n_valid = _run_trace(
         magnetic_configuration, radial_profiles, beam, settings
@@ -261,11 +269,22 @@ def trace(
             optical_depth=tau_final,
             deposition_rho_mean=rho_mean,
             deposition_rho_std=rho_std,
+            step_limit_reached=result.step_limit_reached,
         )
 
     # Trim to valid (finite) arc-length entries; diffrax leaves unvisited
     # SaveAt slots as inf after an early-exit event.
     n = int(n_valid.item())
+    if bool(result.step_limit_reached):
+        warnings.warn(
+            f"The ODE solver reached TracerSettings.max_steps={settings.max_steps} "
+            f"and stopped at arc length {float(result.arc_length[n - 1]):.3g} m "
+            "before the ray left the plasma or was absorbed, so the trajectory is "
+            "truncated and the absorbed power is underestimated. Increase "
+            "TracerSettings.max_steps.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
 
     beam_profile = BeamProfile(
         position=result.ode_state[:n, :3],
@@ -280,7 +299,8 @@ def trace(
         linear_power_density=result.linear_power_density[:n] * beam.power,
     )
 
-    # Clamp: _next_power_of_two(n) can exceed the buffer length (e.g. 4097→8192).
+    # Clamp: _next_power_of_two(n) can exceed the buffer length (e.g. 4097→8192
+    # for the default max_steps=4096).
     n_bucket = min(_next_power_of_two(n), result.arc_length.shape[0])
     power_binned = _bin_power_deposition(
         magnetic_configuration.rho_1d,
@@ -309,4 +329,5 @@ def trace(
         optical_depth=tau_final,
         deposition_rho_mean=rho_mean,
         deposition_rho_std=rho_std,
+        step_limit_reached=result.step_limit_reached,
     )

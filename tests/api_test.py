@@ -2,6 +2,7 @@
 
 import jax.numpy as jnp
 import numpy as np
+import pytest
 
 from raytrax.api import _bin_power_deposition, _next_power_of_two, trace
 from raytrax.equilibrium.interpolate import MagneticConfiguration
@@ -136,6 +137,45 @@ def test_tracer_settings_non_default_runs_under_jit(tokamak_magnetic_configurati
 
     assert jnp.isfinite(result.absorbed_power)
     assert jnp.isfinite(result.optical_depth)
+
+
+def test_step_limit_is_reported_instead_of_silently_truncating(
+    tokamak_magnetic_configuration,
+):
+    """A trace that runs out of ODE steps is flagged instead of reporting ~0 power.
+
+    The X-mode ray at the second harmonic is fully absorbed in about 20 steps.
+    """
+    _, profiles = _make_tokamak_beam_and_profiles(tokamak_magnetic_configuration)
+    beam = Beam(
+        position=jnp.array([3.8, 0.0, 0.0]),
+        direction=jnp.array([-1.0, 0.0, 0.0]),
+        frequency=140e9,
+        mode="X",
+        power=1e6,
+    )
+    short = TracerSettings(max_steps=16)
+
+    with pytest.warns(RuntimeWarning, match="max_steps=16"):
+        truncated = trace(
+            tokamak_magnetic_configuration, profiles, beam, settings=short
+        )
+    assert bool(truncated.step_limit_reached)
+    assert truncated.beam_profile.arc_length.shape == (17,)
+
+    padded = trace(
+        tokamak_magnetic_configuration, profiles, beam, trim=False, settings=short
+    )
+    assert bool(padded.step_limit_reached)
+
+    complete = trace(
+        tokamak_magnetic_configuration,
+        profiles,
+        beam,
+        settings=TracerSettings(max_steps=64),
+    )
+    assert not bool(complete.step_limit_reached)
+    assert float(complete.absorbed_power_fraction) > 0.99
 
 
 def test_tracer_settings_max_arc_length_limits_trajectory(

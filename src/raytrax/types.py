@@ -170,6 +170,11 @@ class TraceResult:
     optical_depth: jt.Float[jax.Array, ""]
     r"""Total optical depth $\tau$ accumulated along the ray."""
 
+    step_limit_reached: jt.Bool[jax.Array, ""]
+    """Whether the ODE solver ran out of steps (`TracerSettings.max_steps`) before
+    the ray left the plasma or was absorbed. If set, the trajectory is truncated and
+    the absorbed power is underestimated."""
+
     deposition_rho_mean: jt.Float[jax.Array, ""]
     r"""Flux-surface-volume-weighted mean normalised radius $\langle\rho\rangle$ of power deposition."""
 
@@ -183,9 +188,8 @@ class TracerSettings:
     """Settings for the ray tracing ODE solver.
 
     All float fields are JAX-traceable (changing them does **not** trigger
-    recompilation). Only ``max_steps`` in the solver — which controls static
-    buffer sizes — would require recompilation, and is intentionally omitted
-    here for that reason.
+    recompilation). ``max_steps`` is static because it sizes the output buffers,
+    so changing it triggers a recompilation.
     """
 
     relative_tolerance: float = 1e-4
@@ -197,6 +201,12 @@ class TracerSettings:
     max_step_size: float = 0.05
     """Maximum ODE step size in metres (arc length). Decreasing this improves
     accuracy at the cost of more steps."""
+
+    max_steps: int = dataclass_field(default=4096, metadata={"static": True})
+    """Maximum number of ODE steps. Sizes the padded output buffers
+    (`max_steps + 1` entries), so changing it triggers a recompilation. If the
+    budget runs out before the ray terminates, `TraceResult.step_limit_reached`
+    is set; raise it when using a small `max_step_size` or tight tolerances."""
 
     max_arc_length: float = 20.0
     """Maximum arc length to integrate in metres before the solver gives up."""
