@@ -19,8 +19,6 @@ def _jv_series(v, z):
     Pure JAX implementation — no callbacks, fully differentiable, vmap-friendly.
     Handles both scalar and array z inputs via broadcasting.
     """
-    # Polynomial in (z/2)^2 with coefficients fixed per (static) order: no exp, log or
-    # gammaln per term. The resonance integrand evaluates this 4 times per node.
     coefficients = [
         (-1) ** k / (math.factorial(k) * math.factorial(k + v))
         for k in range(_JV_SERIES_NTERMS)
