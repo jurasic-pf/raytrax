@@ -1,6 +1,5 @@
 """Weakly-relativistic electron cyclotron absorption coefficient via momentum-space resonance integration."""
 
-import functools
 import math
 from typing import Literal
 
@@ -9,6 +8,7 @@ import jax.numpy as jnp
 import jaxtyping as jt
 import numpy as np
 from scipy.constants import c as speed_of_light
+from scipy.special import lambertw
 
 from raytrax.math import bessel
 from raytrax.physics import dielectric_tensor as dielectric_tensor_module
@@ -329,9 +329,8 @@ def compute_resonance_integral(
     # only as far as needed to reach the requested relative accuracy, or the
     # whole curve if it is shorter.
     mu = 2 / thermal_velocity**2
-    n_decay_lengths, nodes, weights = _resonance_quadrature(
-        resonance_rtol, harmonic_index
-    )
+    n_decay_lengths, n_nodes = _resonance_quadrature(resonance_rtol, harmonic_index)
+    nodes, weights = np.polynomial.legendre.leggauss(n_nodes)
     decay_length = 1 / (mu * jnp.maximum(jnp.abs(n_para), 1e-12))
     window_length = n_decay_lengths * decay_length
     u_min = jnp.where(
@@ -380,35 +379,17 @@ def compute_resonance_integral(
     return jax.lax.cond(resonance_in_bulk, compute_integral, lambda: 0.0)
 
 
-@functools.cache
-def _resonance_quadrature(
-    rtol: float, harmonic_index: int
-) -> tuple[float, np.ndarray, np.ndarray]:
-    """Window length in decay lengths and Gauss-Legendre rule for relative accuracy rtol.
+def _resonance_quadrature(rtol: float, harmonic_index: int) -> tuple[float, int]:
+    """Window length in decay lengths and Gauss-Legendre node count for relative accuracy rtol.
 
-    Near its low-γ end the resonance integrand behaves like t^n e^-t, with t the
-    distance in decay lengths and n the harmonic (u_⊥² and the Bessel factors
-    vanish there like t^n). The window ends where the tail of this model drops
-    below rtol; the node count is the smallest that integrates it to rtol.
+    Near its low-γ end the integrand behaves like t^n e^-t (t in decay lengths, n the
+    harmonic), so the tail beyond a window K is ~K^n e^-K, and N Gauss-Legendre nodes
+    integrate e^-t over [0, K] to ~(K/4)^(2N) / (2N)! ≈ (eK / 8N)^(2N).
     """
-    n = harmonic_index
-
-    def tail(length: float) -> float:
-        # Fraction of the integral of t^n e^-t over [0, ∞) beyond `length`.
-        return math.exp(-length) * sum(
-            length**j / math.factorial(j) for j in range(n + 1)
-        )
-
-    length = 1.0
-    while tail(length) > rtol:
-        length += 0.25
-    exact = math.factorial(n) * (1 - tail(length))
-    for n_nodes in range(4, 200):
-        x, w = np.polynomial.legendre.leggauss(n_nodes)
-        t = 0.5 * length * (x + 1)
-        if abs(0.5 * length * np.dot(w, t**n * np.exp(-t)) / exact - 1) < rtol:
-            return length, x, w
-    raise ValueError(f"No Gauss-Legendre rule up to 200 nodes reaches rtol={rtol}.")
+    log_inv_rtol = math.log(1 / rtol)
+    window = log_inv_rtol + harmonic_index * math.log(log_inv_rtol)
+    growth = math.exp(lambertw(4 * log_inv_rtol / (math.e * window)).real)
+    return window, math.ceil(math.e * window / 8 * growth)
 
 
 def resonance_integrand(
