@@ -142,6 +142,29 @@ def test_interpolate_toroidal_to_cylindrical_grid(torus_wout):
     )
 
 
+def test_cylindrical_grid_nodes_are_exact(torus_wout):
+    """On a circular torus rho and B are known in closed form at every node."""
+    grid = np.asarray(
+        cylindrical_grid_for_equilibrium(
+            equilibrium=torus_wout, n_rho=10, n_theta=8, n_phi=6, n_r=15, n_z=17
+        )
+    )
+    r, z, rho = grid[..., 0], grid[..., 2], grid[..., 3]
+    rho_exact = np.hypot(r - 2.0, z) / 0.5
+    # Nodes on the rho = 1.2 surface itself may fall on either side by round-off.
+    decided = np.abs(rho_exact - 1.2) > 1e-9
+    np.testing.assert_array_equal(np.isfinite(rho)[decided], (rho_exact < 1.2)[decided])
+    inside = np.isfinite(rho)
+    np.testing.assert_allclose(rho[inside], rho_exact[inside], rtol=0, atol=1e-12)
+    b_phi_exact = 0.7 * np.where(rho_exact <= 1, r, 2.0 + (r - 2.0) / rho_exact)
+    np.testing.assert_allclose(
+        grid[..., 4:][inside],
+        np.stack([0 * r, b_phi_exact, 0 * r], axis=-1)[inside],
+        rtol=0,
+        atol=1e-12,
+    )
+
+
 def test_cylindrical_grid_for_equilibrium(torus_wout):
     """Test that cylindrical_grid_for_equilibrium works correctly."""
     n_rho = 10
@@ -213,7 +236,7 @@ def test_build_magnetic_field_interpolator_w7x(w7x_wout):
     B_interpolator = _make_B_callable(B_interp_raw, w7x_wout.nfp)
     # Test the interpolator at different positions
     # Use positions we know are within the W7X geometry
-    R_major = 5.6
+    R_major = 6.0
 
     positions = jnp.array(
         [
