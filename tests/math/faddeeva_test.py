@@ -15,6 +15,111 @@ jax.config.update("jax_enable_x64", True)
 from raytrax.math.faddeeva import wofz_jax  # noqa: E402
 
 # ---------------------------------------------------------------------------
+# Reference: the previous implementation
+# ---------------------------------------------------------------------------
+
+_ERRF = 1.12837916709551257  # 2/sqrt(pi)
+_XLIM = 5.33
+_YLIM = 4.29
+
+
+def _wofz_region2(x: jax.Array, y: jax.Array):
+    """9-step backward continued fraction for |z| outside the inner region."""
+    xh = y
+    yh = x
+
+    def body(i, state):
+        n = jnp.float64(10 - i)  # i=1..9  →  n=9..1
+        Rx, Ry = state
+        Tx = xh + n * Rx
+        Ty = yh - n * Ry
+        Tn = Tx * Tx + Ty * Ty
+        return 0.5 * Tx / Tn, 0.5 * Ty / Tn
+
+    Rx, Ry = jax.lax.fori_loop(1, 10, body, (jnp.zeros_like(x), jnp.zeros_like(x)))
+    return _ERRF * Rx, _ERRF * Ry
+
+
+def _wofz_region1(x: jax.Array, y: jax.Array):
+    """Inner-region Shuman-sum algorithm for y < 4.29 and x < 5.33.
+
+    The loop runs at most 31 steps (nu ≤ 31); a static fori_loop with
+    masking replaces the data-dependent while_loop.
+    """
+    q = (1.0 - y / _YLIM) * jnp.sqrt(jnp.maximum(0.0, 1.0 - (x / _XLIM) ** 2))
+    h = 1.0 / (3.2 * q)
+    nc = 7.0 + jnp.floor(23.0 * q)  # ∈ [7, 30]
+    nu = 10.0 + jnp.floor(21.0 * q)  # ∈ [10, 31]
+    xl = jnp.power(h, 1.0 - nc)
+    xh = y + 0.5 / h
+    yh = x
+
+    _MAX = 32
+
+    def body(i, state):
+        n = jnp.float64(_MAX - 1 - i)
+        Rx, Ry, xl_, Sx, Sy = state
+
+        Tx = xh + n * Rx
+        Ty = yh - n * Ry
+        Tn = Tx * Tx + Ty * Ty
+        Rx2 = 0.5 * Tx / Tn
+        Ry2 = 0.5 * Ty / Tn
+
+        active = (n >= 1.0) & (n <= nu)
+        accum = active & (n <= nc)
+
+        Saux = Sx + xl_
+        Sx2 = jnp.where(accum, Rx2 * Saux - Ry2 * Sy, Sx)
+        Sy2 = jnp.where(accum, Rx2 * Sy + Ry2 * Saux, Sy)
+        xl2 = jnp.where(accum, h * xl_, xl_)
+        Rx2 = jnp.where(active, Rx2, Rx)
+        Ry2 = jnp.where(active, Ry2, Ry)
+
+        return Rx2, Ry2, xl2, Sx2, Sy2
+
+    init = (
+        jnp.zeros_like(x),
+        jnp.zeros_like(x),
+        xl,
+        jnp.zeros_like(x),
+        jnp.zeros_like(x),
+    )
+    _, _, _, Sx, Sy = jax.lax.fori_loop(0, _MAX, body, init)
+    return _ERRF * Sx, _ERRF * Sy
+
+
+def _wofz_poppe_wijers(z):
+    """Previous implementation (Poppe & Wijers 1990, Algorithm 680), kept as a reference."""
+    z = jnp.asarray(z, dtype=jnp.complex128)
+    x_re = jnp.real(z)
+    x_im = jnp.imag(z)
+    x = jnp.abs(x_re)
+    y = jnp.abs(x_im)
+
+    inner = (y < _YLIM) & (x < _XLIM)
+    Wx1, Wy1 = _wofz_region1(x, y)
+    Wx2, Wy2 = _wofz_region2(x, y)
+    Wx = jnp.where(inner, Wx1, Wx2)
+    Wy = jnp.where(inner, Wy1, Wy2)
+
+    # Im(z) = 0: Re(w(t)) = exp(-t²)
+    Wx = jnp.where(y == 0.0, jnp.exp(-x * x), Wx)
+
+    # Odd symmetry in Re(z): Im(w(-x+iy)) = -Im(w(x+iy))
+    Wy = jnp.sign(x_re) * Wy
+
+    # Reflection for Im(z) < 0: w(a-iy) = 2exp(-(a-iy)²) - w(-a+iy)
+    e2 = 2.0 * jnp.exp(y * y - x * x)
+    Wx_neg = e2 * jnp.cos(2.0 * x * y) - Wx
+    Wy_neg = jnp.sign(x_re) * e2 * jnp.sin(2.0 * x * y) + Wy
+    Wx = jnp.where(x_im < 0.0, Wx_neg, Wx)
+    Wy = jnp.where(x_im < 0.0, Wy_neg, Wy)
+
+    return Wx + 1j * Wy
+
+
+# ---------------------------------------------------------------------------
 # Test points covering the full complex plane
 # ---------------------------------------------------------------------------
 
@@ -201,3 +306,30 @@ def test_plasma_dispersion_function_derivative():
     Z_prime = plasma_dispersion_function_derivative(z)
     Z_prime_fd = (Z[2:] - Z[:-2]) / (2 * dx)
     np.testing.assert_allclose(Z_prime[1:-1], Z_prime_fd, rtol=0, atol=1e-3)
+
+
+# Grid over the region the Shkarofsky functions visit on the public test rays
+# (Re in [-123, 39], Im in [0, 152]) plus the lower half-plane near the origin.
+_GRID = np.concatenate(
+    [
+        (
+            np.linspace(-130, 130, 261)[None] + 1j * np.linspace(0, 160, 161)[:, None]
+        ).ravel(),
+        (
+            np.linspace(-6, 6, 121)[None] + 1j * np.linspace(-6, -1e-3, 61)[:, None]
+        ).ravel(),
+    ]
+)
+
+
+def test_wofz_matches_scipy_on_grid():
+    # Measured maximum relative error 3.3e-14 (lower half-plane, via the reflection).
+    got = np.asarray(jax.jit(jax.vmap(wofz_jax))(jnp.asarray(_GRID)))
+    np.testing.assert_allclose(got, scipy_wofz(_GRID), rtol=1e-13, atol=0)
+
+
+def test_wofz_matches_previous_implementation_on_grid():
+    # Limited by the reference, which is off scipy by up to 4e-10.
+    got = np.asarray(jax.jit(jax.vmap(wofz_jax))(jnp.asarray(_GRID)))
+    reference = np.asarray(jax.jit(jax.vmap(_wofz_poppe_wijers))(jnp.asarray(_GRID)))
+    np.testing.assert_allclose(got, reference, rtol=1e-9, atol=0)
