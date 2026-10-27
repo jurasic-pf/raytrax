@@ -170,16 +170,17 @@ class TraceResult:
     optical_depth: jt.Float[jax.Array, ""]
     r"""Total optical depth $\tau$ accumulated along the ray."""
 
-    step_limit_reached: jt.Bool[jax.Array, ""]
-    """Whether the ODE solver ran out of steps (`TracerSettings.max_steps`) before
-    the ray left the plasma or was absorbed. If set, the trajectory is truncated and
-    the absorbed power is underestimated."""
-
     deposition_rho_mean: jt.Float[jax.Array, ""]
     r"""Flux-surface-volume-weighted mean normalised radius $\langle\rho\rangle$ of power deposition."""
 
     deposition_rho_std: jt.Float[jax.Array, ""]
     r"""Flux-surface-volume-weighted standard deviation of $\rho$ for power deposition."""
+
+    cancelled: jt.Bool[jax.Array, ""]
+    """Whether the ODE solve stopped before the ray left the plasma or was absorbed:
+    it ran out of steps (`TracerSettings.max_steps`), reached
+    `TracerSettings.max_arc_length`, or the solver failed. If set, the absorbed
+    power may be underestimated."""
 
 
 @jax.tree_util.register_dataclass
@@ -202,14 +203,15 @@ class TracerSettings:
     """Maximum ODE step size in metres (arc length). Decreasing this improves
     accuracy at the cost of more steps."""
 
+    max_arc_length: float = 20.0
+    """Maximum arc length to integrate in metres before the solver gives up."""
+
+    # Last, so settings passed positionally keep their meaning.
     max_steps: int = dataclass_field(default=4096, metadata={"static": True})
     """Maximum number of ODE steps. Sizes the padded output buffers
     (`max_steps + 1` entries), so changing it triggers a recompilation. If the
-    budget runs out before the ray terminates, `TraceResult.step_limit_reached`
-    is set; raise it when using a small `max_step_size` or tight tolerances."""
-
-    max_arc_length: float = 20.0
-    """Maximum arc length to integrate in metres before the solver gives up."""
+    budget runs out before the ray terminates, `TraceResult.cancelled` is set;
+    raise it when using a small `max_step_size` or tight tolerances."""
 
 
 @jax.tree_util.register_dataclass

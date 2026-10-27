@@ -163,14 +163,14 @@ def test_step_limit_is_reported_instead_of_silently_truncating(
         truncated = trace(
             tokamak_magnetic_configuration, profiles, beam, settings=short
         )
-    assert bool(truncated.step_limit_reached)
+    assert bool(truncated.cancelled)
     assert truncated.beam_profile.arc_length.shape == (17,)
 
     # trim=False must stay traceable: the flag is a traced array, not a Python bool.
     padded = jax.jit(functools.partial(trace, trim=False, settings=short))(
         tokamak_magnetic_configuration, profiles, beam
     )
-    assert bool(padded.step_limit_reached)
+    assert bool(padded.cancelled)
 
     complete = trace(
         tokamak_magnetic_configuration,
@@ -178,7 +178,7 @@ def test_step_limit_is_reported_instead_of_silently_truncating(
         beam,
         settings=TracerSettings(max_steps=64),
     )
-    assert not bool(complete.step_limit_reached)
+    assert not bool(complete.cancelled)
     assert float(complete.absorbed_power_fraction) > 0.99
 
 
@@ -189,12 +189,15 @@ def test_tracer_settings_max_arc_length_limits_trajectory(
     beam, profiles = _make_tokamak_beam_and_profiles(tokamak_magnetic_configuration)
 
     result_default = trace(tokamak_magnetic_configuration, profiles, beam)
-    result_short = trace(
-        tokamak_magnetic_configuration,
-        profiles,
-        beam,
-        settings=TracerSettings(max_arc_length=0.5),
-    )
+    with pytest.warns(RuntimeWarning, match="max_arc_length"):
+        result_short = trace(
+            tokamak_magnetic_configuration,
+            profiles,
+            beam,
+            settings=TracerSettings(max_arc_length=0.5),
+        )
+    assert bool(result_short.cancelled)
+    assert not bool(result_default.cancelled)
 
     default_length = float(result_default.beam_profile.arc_length[-1])
     short_length = float(result_short.beam_profile.arc_length[-1])

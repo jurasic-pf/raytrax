@@ -218,8 +218,8 @@ def trace(
         TraceResult with beam profile and radial deposition profile.
 
     Warns:
-        RuntimeWarning: If `trim=True` and the solver ran out of steps before the
-            ray terminated. With `trim=False` only `TraceResult.step_limit_reached`
+        RuntimeWarning: If `trim=True` and the solve stopped before the ray left the
+            plasma or was absorbed. With `trim=False` only `TraceResult.cancelled`
             is set, so the call stays traceable under `jax.jit` and `jax.grad`.
     """
     result, n_valid = _run_trace(
@@ -269,19 +269,25 @@ def trace(
             optical_depth=tau_final,
             deposition_rho_mean=rho_mean,
             deposition_rho_std=rho_std,
-            step_limit_reached=result.step_limit_reached,
+            cancelled=result.cancelled,
         )
 
     # Trim to valid (finite) arc-length entries; diffrax leaves unvisited
     # SaveAt slots as inf after an early-exit event.
     n = int(n_valid.item())
-    if bool(result.step_limit_reached):
+    if bool(result.cancelled):
+        s_end = float(result.arc_length[n - 1])
+        if n == settings.max_steps + 1:
+            cause = f"ran out of steps (TracerSettings.max_steps={settings.max_steps})"
+        elif s_end >= settings.max_arc_length:
+            cause = (
+                f"reached TracerSettings.max_arc_length={settings.max_arc_length:g} m"
+            )
+        else:
+            cause = "failed (e.g. a non-finite state)"
         warnings.warn(
-            f"The ODE solver reached TracerSettings.max_steps={settings.max_steps} "
-            f"and stopped at arc length {float(result.arc_length[n - 1]):.3g} m "
-            "before the ray left the plasma or was absorbed, so the trajectory is "
-            "truncated and the absorbed power is underestimated. Increase "
-            "TracerSettings.max_steps.",
+            f"The ODE solver {cause} at arc length {s_end:.3g} m, before the ray left "
+            "the plasma or was absorbed, so the absorbed power may be underestimated.",
             RuntimeWarning,
             stacklevel=2,
         )
@@ -329,5 +335,5 @@ def trace(
         optical_depth=tau_final,
         deposition_rho_mean=rho_mean,
         deposition_rho_std=rho_std,
-        step_limit_reached=result.step_limit_reached,
+        cancelled=result.cancelled,
     )

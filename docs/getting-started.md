@@ -112,7 +112,7 @@ The returned [`TraceResult`][raytrax.types.TraceResult] contains:
 - `absorbed_power_fraction` — fraction of the input beam power absorbed, i.e. $1 - e^{-\tau}$.
 - `optical_depth` — total optical depth $\tau$ accumulated along the ray.
 - `deposition_rho_mean` / `deposition_rho_std` — volume-weighted mean and standard deviation of the deposition location in $\rho$.
-- `step_limit_reached` — whether the solver ran out of steps before the ray terminated; if set, raise `TracerSettings.max_steps` (see [Solver Settings](tuning.md)).
+- `cancelled` — whether the solve stopped before the ray left the plasma or was absorbed (out of steps, `max_arc_length` reached, or a solver failure); the absorbed power is then underestimated (see [Solver Settings](tuning.md)).
 
 ## Jupyter Notebooks
 

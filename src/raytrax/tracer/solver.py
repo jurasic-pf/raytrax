@@ -340,9 +340,7 @@ def trace_jitted(
             electron_temperature=diag.electron_temperature,
             absorption_coefficient=diag.absorption_coefficient,
             linear_power_density=diag.linear_power_density,
-            step_limit_reached=jnp.asarray(
-                sol.result == diffrax.RESULTS.max_steps_reached
-            ),
+            cancelled=jnp.asarray(sol.result != diffrax.RESULTS.event_occurred),
         ),
         n_valid,
     )
