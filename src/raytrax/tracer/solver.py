@@ -1,5 +1,6 @@
 """JIT-compiled ray tracing ODE solver: integrates position, refractive index, and optical depth via diffrax."""
 
+import functools
 from typing import NamedTuple, cast
 
 import diffrax
@@ -316,7 +317,9 @@ def _compute_beam_diagnostics(
     )
 
 
-@jax.jit
+# nfp is a structural constant of the equilibrium (static in MagneticConfiguration);
+# under a plain jit the field period would become a traced runtime value.
+@functools.partial(jax.jit, static_argnames=("nfp",))
 def trace_jitted(
     position: jt.Float[jax.Array, "3"],
     direction: jt.Float[jax.Array, "3"],
