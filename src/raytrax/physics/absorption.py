@@ -329,7 +329,9 @@ def compute_resonance_integral(
     # only as far as needed to reach the requested relative accuracy, or the
     # whole curve if it is shorter.
     mu = 2 / thermal_velocity**2
-    n_decay_lengths, n_nodes = _resonance_quadrature(resonance_rtol, harmonic_index)
+    n_decay_lengths, n_nodes = _resonance_quadrature(
+        resonance_rtol, int(harmonic_index)
+    )
     nodes, weights = np.polynomial.legendre.leggauss(n_nodes)
     decay_length = 1 / (mu * jnp.maximum(jnp.abs(n_para), 1e-12))
     window_length = n_decay_lengths * decay_length
