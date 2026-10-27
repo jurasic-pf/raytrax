@@ -5,6 +5,7 @@ from typing import Literal
 import jax
 import jax.numpy as jnp
 import jaxtyping as jt
+import numpy as np
 from scipy.constants import c as speed_of_light
 
 from raytrax.math import bessel
@@ -14,6 +15,11 @@ from raytrax.types import ScalarFloat
 
 ScalarInt = int | jt.Int[jax.Array, " "]
 ScalarBool = bool | jt.Bool[jax.Array, " "]
+
+# Truncating the resonance integral after 40 e-foldings of the Maxwell-Juettner factor drops
+# ~K^2 e^-K ≈ 1e-14 of it; 24 Gauss-Legendre nodes resolve that window to the same level.
+_RESONANCE_EFOLDINGS = 40.0
+_GAUSS_NODES, _GAUSS_WEIGHTS = np.polynomial.legendre.leggauss(24)
 
 
 def absorption_coefficient_conditional(
@@ -300,29 +306,33 @@ def compute_resonance_integral(
     u_max_raw = u_res + delta_u
     resonance_in_bulk = jnp.minimum(jnp.abs(u_min_raw), jnp.abs(u_max_raw)) < u_cutoff
 
-    # Clamp the integration window to [-u_cutoff, +u_cutoff].  For N_∥ → 1
-    # the resonance circle diverges; zero the contribution since the
+    # γ is linear in u_∥ on the circle, so the distribution peaks at the circle end
+    # with the smaller γ and decays as exp(-μ|N_∥|Δu_∥) away from it; that decay
+    # length, usually far shorter than v_th, sets the support.
+    # For N_∥ → 1 the resonance circle diverges; zero the contribution since the
     # quasi-longitudinal regime is outside ECH validity.
+    mu = 2 / thermal_velocity**2
+    window = _RESONANCE_EFOLDINGS / (mu * jnp.maximum(jnp.abs(n_para), 1e-12))
     near_lightline = jnp.abs(denom) < 1e-4
-    u_min = jnp.where(near_lightline, 0.0, jnp.maximum(u_min_raw, -u_cutoff))
-    u_max = jnp.where(near_lightline, 0.0, jnp.minimum(u_max_raw, +u_cutoff))
+    u_min = jnp.where(n_para < 0, jnp.maximum(u_min_raw, u_max_raw - window), u_min_raw)
+    u_max = jnp.where(n_para < 0, u_max_raw, jnp.minimum(u_max_raw, u_min_raw + window))
+    u_min = jnp.where(near_lightline, 0.0, u_min)
+    u_max = jnp.where(near_lightline, 0.0, u_max)
 
     # The u_gamma_limit = (1-nY)/N_∥ bound is not enforced explicitly; the
     # γ²−u_∥²−1<0 guard in resonance_integrand zeros the integrand for γ<1.
 
     def compute_integral() -> ScalarFloat:
         # K2_scaled = kve(2, mu) depends only on thermal_velocity, which is
-        # constant across all 1000 vmap iterations.  Pre-compute it here so
-        # it is evaluated exactly once rather than once per grid point.
-        mu = 2 / thermal_velocity**2
+        # constant across all vmap iterations.  Pre-compute it here so
+        # it is evaluated exactly once rather than once per node.
         K2_scaled = bessel.kve_jax(2, mu)
 
-        # 1000-point trapezoidal grid.  The integrand 1/e-width scales as
-        # 1/(μ·N_∥) with μ = 2/v_th²; 1000 points gives ≥5 points per
-        # 1/e-folding for T ≥ 0.5 keV and N_∥ ≤ 0.5.
-        u_grid = jnp.linspace(u_min, u_max, 1000)
+        # The integrand is analytic on the window and vanishes at the circle
+        # ends, so Gauss-Legendre converges exponentially.
+        half_width = 0.5 * (u_max - u_min)
+        u_grid = half_width * _GAUSS_NODES + 0.5 * (u_max + u_min)
 
-        # Compute the integrand values
         integrand_values = jax.vmap(
             lambda u: resonance_integrand(
                 harmonic_index=harmonic_index,
@@ -336,8 +346,7 @@ def compute_resonance_integral(
                 polarization_vector=polarization_vector,
             )
         )(u_grid)
-        # Integrate using the trapezoidal rule
-        return jnp.trapezoid(integrand_values, u_grid)
+        return half_width * jnp.dot(_GAUSS_WEIGHTS, integrand_values)
 
     return jax.lax.cond(resonance_in_bulk, compute_integral, lambda: 0.0)
 
