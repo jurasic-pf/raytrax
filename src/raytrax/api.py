@@ -340,12 +340,12 @@ def trace(
     power_binned = _bin_power_deposition(
         magnetic_configuration.rho_1d,
         magnetic_configuration.dvolume_drho,
-        host.arc_length[:n_bucket],
-        host.normalized_effective_radius[:n_bucket],
-        host.ode_state[:n_bucket, 6],
+        result.arc_length[:n_bucket],
+        result.normalized_effective_radius[:n_bucket],
+        result.ode_state[:n_bucket, 6],
     )
 
-    tau_final = jnp.asarray(host.ode_state[n - 1, 6])
+    tau_final = jnp.asarray(result.ode_state[n - 1, 6])
     absorbed_fraction = 1.0 - jnp.exp(-tau_final)
     rho_mean, rho_std = _deposition_stats(
         power_binned,
