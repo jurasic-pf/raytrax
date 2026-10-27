@@ -1,5 +1,7 @@
 """Main functions to interact with Raytrax."""
 
+import warnings
+
 import interpax
 import jax
 import jax.numpy as jnp
@@ -54,7 +56,6 @@ def _bin_volumes(
     return jnp.maximum(dvolume_drho * jnp.diff(edges), _MIN_BIN_VOLUME)
 
 
-# Eager, the binning dispatches hundreds of small ops per call; compiled per length bucket.
 @jax.jit
 def _bin_power_deposition(
     rho_grid: jt.Float[jax.Array, " nrho"],
@@ -187,8 +188,6 @@ def _deposition_stats(
     )
 
 
-# Jitted so the interpolators are built inside the compiled program, not op by op
-# on every call.
 @jax.jit
 def _run_trace(
     magnetic_configuration: MagneticConfiguration,
@@ -235,11 +234,17 @@ def trace(
         trim: If `True` (default), trim the output to the valid trajectory length.
             Set this to `False` when using automatic differentiation.
             Note: this parameter may be removed in a future release.
-        settings: ODE solver settings (tolerances, step sizes, termination
-            thresholds). Defaults to :class:`TracerSettings` with sensible values.
+        settings: ODE solver settings (tolerances, step sizes, step budget,
+            termination thresholds). Defaults to :class:`TracerSettings` with
+            sensible values.
 
     Returns:
         TraceResult with beam profile and radial deposition profile.
+
+    Warns:
+        RuntimeWarning: If `trim=True` and the solve stopped before the ray left the
+            plasma or was absorbed. With `trim=False` only `TraceResult.incomplete`
+            is set, so the call stays traceable under `jax.jit` and `jax.grad`.
     """
     result, n_valid = _run_trace(
         magnetic_configuration, radial_profiles, beam, settings
@@ -287,31 +292,50 @@ def trace(
             optical_depth=tau_final,
             deposition_rho_mean=rho_mean,
             deposition_rho_std=rho_std,
+            incomplete=result.incomplete,
         )
 
     # Trim to valid (finite) arc-length entries; diffrax leaves unvisited
     # SaveAt slots as inf after an early-exit event.
     n = int(n_valid.item())
+
     # Slice on the host: eager JAX slicing to a new length n compiles a program per
     # op and length, so every new trajectory length would recompile.
-    host = jax.device_get(result)
+    result = jax.device_get(result)
+    if bool(result.incomplete):
+        s_end = float(result.arc_length[n - 1])
+        if n == settings.max_steps + 1:
+            cause = f"ran out of steps (TracerSettings.max_steps={settings.max_steps})"
+        elif s_end >= settings.max_arc_length:
+            cause = (
+                f"reached TracerSettings.max_arc_length={settings.max_arc_length:g} m"
+            )
+        else:
+            cause = "failed (e.g. a non-finite state)"
+        warnings.warn(
+            f"The ODE solver {cause} at arc length {s_end:.3g} m, before the ray left "
+            "the plasma or was absorbed, so the absorbed power may be underestimated.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
 
     beam_profile = BeamProfile(
-        position=jnp.asarray(host.ode_state[:n, :3]),
-        arc_length=jnp.asarray(host.arc_length[:n]),
-        refractive_index=jnp.asarray(host.ode_state[:n, 3:6]),
-        optical_depth=jnp.asarray(host.ode_state[:n, 6]),
-        absorption_coefficient=jnp.asarray(host.absorption_coefficient[:n]),
-        electron_density=jnp.asarray(host.electron_density[:n]),
-        electron_temperature=jnp.asarray(host.electron_temperature[:n]),
-        magnetic_field=jnp.asarray(host.magnetic_field[:n]),
-        normalized_effective_radius=jnp.asarray(host.normalized_effective_radius[:n]),
+        position=jnp.asarray(result.ode_state[:n, :3]),
+        arc_length=jnp.asarray(result.arc_length[:n]),
+        refractive_index=jnp.asarray(result.ode_state[:n, 3:6]),
+        optical_depth=jnp.asarray(result.ode_state[:n, 6]),
+        absorption_coefficient=jnp.asarray(result.absorption_coefficient[:n]),
+        electron_density=jnp.asarray(result.electron_density[:n]),
+        electron_temperature=jnp.asarray(result.electron_temperature[:n]),
+        magnetic_field=jnp.asarray(result.magnetic_field[:n]),
+        normalized_effective_radius=jnp.asarray(result.normalized_effective_radius[:n]),
         linear_power_density=jnp.asarray(
-            host.linear_power_density[:n] * float(beam.power)
+            result.linear_power_density[:n] * float(beam.power)
         ),
     )
 
-    # Clamp: _next_power_of_two(n) can exceed the buffer length (e.g. 4097→8192).
+    # Clamp: _next_power_of_two(n) can exceed the buffer length (e.g. 4097→8192
+    # for the default max_steps=4096).
     n_bucket = min(_next_power_of_two(n), result.arc_length.shape[0])
     power_binned = _bin_power_deposition(
         magnetic_configuration.rho_1d,
@@ -339,4 +363,5 @@ def trace(
         optical_depth=tau_final,
         deposition_rho_mean=rho_mean,
         deposition_rho_std=rho_std,
+        incomplete=result.incomplete,
     )
