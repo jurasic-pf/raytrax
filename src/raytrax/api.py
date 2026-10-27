@@ -219,7 +219,7 @@ def trace(
 
     Warns:
         RuntimeWarning: If `trim=True` and the solve stopped before the ray left the
-            plasma or was absorbed. With `trim=False` only `TraceResult.cancelled`
+            plasma or was absorbed. With `trim=False` only `TraceResult.incomplete`
             is set, so the call stays traceable under `jax.jit` and `jax.grad`.
     """
     result, n_valid = _run_trace(
@@ -269,13 +269,13 @@ def trace(
             optical_depth=tau_final,
             deposition_rho_mean=rho_mean,
             deposition_rho_std=rho_std,
-            cancelled=result.cancelled,
+            incomplete=result.incomplete,
         )
 
     # Trim to valid (finite) arc-length entries; diffrax leaves unvisited
     # SaveAt slots as inf after an early-exit event.
     n = int(n_valid.item())
-    if bool(result.cancelled):
+    if bool(result.incomplete):
         s_end = float(result.arc_length[n - 1])
         if n == settings.max_steps + 1:
             cause = f"ran out of steps (TracerSettings.max_steps={settings.max_steps})"
@@ -335,5 +335,5 @@ def trace(
         optical_depth=tau_final,
         deposition_rho_mean=rho_mean,
         deposition_rho_std=rho_std,
-        cancelled=result.cancelled,
+        incomplete=result.incomplete,
     )

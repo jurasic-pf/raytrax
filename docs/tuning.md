@@ -32,7 +32,7 @@ The four float fields are ordinary JAX values (not static compile-time constants
 
 **`max_arc_length`** is a safety cutoff. Rays that haven't terminated (by leaving the plasma or being absorbed) are stopped at this arc length. 20 m is generous for any current fusion device; you would only need to lower it to speed up debugging of misconfigured inputs, or raise it for very large devices.
 
-**`max_steps`** is the step budget of the ODE solver and sizes the output buffers (`max_steps + 1` entries per trajectory quantity with `trim=False`). If a ray needs more steps, typically because of a small `max_step_size` or tight tolerances, the trace stops early: `TraceResult.cancelled` is set and, with `trim=True`, `trace` emits a `RuntimeWarning` naming the cause. The absorbed power of such a trace is underestimated, so raise `max_steps` until the flag is no longer set. Reaching `max_arc_length` sets the same flag.
+**`max_steps`** is the step budget of the ODE solver and sizes the output buffers (`max_steps + 1` entries per trajectory quantity with `trim=False`). If a ray needs more steps, typically because of a small `max_step_size` or tight tolerances, the trace stops early: `TraceResult.incomplete` is set and, with `trim=True`, `trace` emits a `RuntimeWarning` naming the cause. The absorbed power of such a trace is underestimated, so raise `max_steps` until the flag is no longer set. Reaching `max_arc_length` sets the same flag.
 
 ## JAX Compilation
 

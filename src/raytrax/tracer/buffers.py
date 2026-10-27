@@ -51,6 +51,6 @@ class TraceBuffers:
     electron_temperature: jt.Float[jax.Array, " nsteps"]
     absorption_coefficient: jt.Float[jax.Array, " nsteps"]
     linear_power_density: jt.Float[jax.Array, " nsteps"]
-    cancelled: jt.Bool[jax.Array, ""]
+    incomplete: jt.Bool[jax.Array, ""]
     """Whether the solve ended without a termination event (ray left the plasma,
     was absorbed or left the domain)."""

@@ -176,7 +176,7 @@ class TraceResult:
     deposition_rho_std: jt.Float[jax.Array, ""]
     r"""Flux-surface-volume-weighted standard deviation of $\rho$ for power deposition."""
 
-    cancelled: jt.Bool[jax.Array, ""]
+    incomplete: jt.Bool[jax.Array, ""]
     """Whether the ODE solve stopped before the ray left the plasma or was absorbed:
     it ran out of steps (`TracerSettings.max_steps`), reached
     `TracerSettings.max_arc_length`, or the solver failed. If set, the absorbed
@@ -210,7 +210,7 @@ class TracerSettings:
     max_steps: int = dataclass_field(default=4096, metadata={"static": True})
     """Maximum number of ODE steps. Sizes the padded output buffers
     (`max_steps + 1` entries), so changing it triggers a recompilation. If the
-    budget runs out before the ray terminates, `TraceResult.cancelled` is set;
+    budget runs out before the ray terminates, `TraceResult.incomplete` is set;
     raise it when using a small `max_step_size` or tight tolerances."""
 
 
