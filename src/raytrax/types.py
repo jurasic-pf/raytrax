@@ -171,10 +171,10 @@ class TraceResult:
     r"""Total optical depth $\tau$ accumulated along the ray."""
 
     deposition_rho_mean: jt.Float[jax.Array, ""]
-    r"""Flux-surface-volume-weighted mean normalised radius $\langle\rho\rangle$ of power deposition."""
+    r"""Power-weighted mean normalised radius $\langle\rho\rangle$ of the deposition; NaN if no power is deposited."""
 
     deposition_rho_std: jt.Float[jax.Array, ""]
-    r"""Flux-surface-volume-weighted standard deviation of $\rho$ for power deposition."""
+    r"""Power-weighted standard deviation of $\rho$ of the deposition; NaN if no power is deposited."""
 
     incomplete: jt.Bool[jax.Array, ""]
     """Whether the ODE solve stopped before the ray left the plasma or was absorbed:
@@ -206,7 +206,12 @@ class TracerSettings:
     max_arc_length: float = 20.0
     """Maximum arc length to integrate in metres before the solver gives up."""
 
-    # Last, so settings passed positionally keep their meaning.
+    constraint_relaxation_rate: float = 20.0
+    """Rate (1/m) at which deviations from the dispersion surface H = 0 are relaxed,
+    dH/ds = -rate * H. Small enough that the relaxation stays stable for explicit
+    steps up to the default maximum step size (rate * 0.05 m = 1). Zero disables
+    the relaxation."""
+
     max_steps: int = dataclass_field(default=4096, metadata={"static": True})
     """Maximum number of ODE steps. Sizes the padded output buffers
     (`max_steps + 1` entries), so changing it triggers a recompilation. If the
@@ -247,10 +252,6 @@ class RadialProfiles:
 
         where $\rho_1 = \rho_{\max} - \text{boundary\_layer\_width}$
         (in $s = \rho^2$ space).
-
-        Use this whenever $n_e(\rho{=}1) > 0$ to avoid a hard
-        discontinuity at the plasma–vacuum interface that would cause spurious
-        ray behaviour.
 
         Args:
             boundary_layer_width: Width of the taper in $\rho$ units

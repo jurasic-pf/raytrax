@@ -158,7 +158,7 @@ def _right_hand_side(
     ``(setting, interpolators, nfp, tracer_settings)`` where ``interpolators`` is an
     :class:`Interpolators` pytree.
     """
-    setting, interpolators, nfp, _ = args
+    setting, interpolators, nfp, tracer_settings = args
 
     state = _y_to_state(y, s)
 
@@ -168,10 +168,10 @@ def _right_hand_side(
     def eval_rho(pos):
         return _eval_rho(pos, interpolators, nfp)
 
-    # Compute both Hamiltonian gradients in a single backward pass,
+    # Compute H and both gradients in a single pass,
     # reusing B-field, rho, and ne from the forward pass (has_aux=True).
-    (hamiltonian_gradient_r, hamiltonian_gradient_n), hamiltonian_aux = (
-        hamiltonian.hamiltonian_gradients(
+    (h_value, hamiltonian_aux), (hamiltonian_gradient_r, hamiltonian_gradient_n) = (
+        hamiltonian.hamiltonian_value_and_gradients(
             state.position,
             state.refractive_index,
             eval_B,
@@ -184,7 +184,15 @@ def _right_hand_side(
     norm = jnp.linalg.norm(hamiltonian_gradient_n)
 
     dr_ds = hamiltonian_gradient_n / norm
-    dn_ds = -hamiltonian_gradient_r / norm
+    # The second term relaxes deviations from the dispersion surface,
+    # dH/ds = -lambda * H, e.g. after a step across the density ramp at the edge.
+    dn_ds = (
+        -hamiltonian_gradient_r / norm
+        - tracer_settings.constraint_relaxation_rate
+        * h_value
+        * hamiltonian_gradient_n
+        / norm**2
+    )
 
     te = interpolators.electron_temperature(hamiltonian_aux.rho)
     dtau_ds = absorption.absorption_coefficient_conditional(
