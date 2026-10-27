@@ -16,10 +16,9 @@ from raytrax.types import ScalarFloat
 ScalarInt = int | jt.Int[jax.Array, " "]
 ScalarBool = bool | jt.Bool[jax.Array, " "]
 
-# Truncating the resonance integral after 40 e-foldings of the Maxwell-Juettner factor drops
-# ~K^2 e^-K ≈ 1e-14 of it; 24 Gauss-Legendre nodes resolve that window to the same level.
+# Integrating the resonance integral over K = 40 e-foldings of the Maxwell-Juettner
+# factor drops ~K^2 e^-K ≈ 1e-14 of it.
 _RESONANCE_EFOLDINGS = 40.0
-_GAUSS_NODES, _GAUSS_WEIGHTS = np.polynomial.legendre.leggauss(24)
 
 
 def absorption_coefficient_conditional(
@@ -30,6 +29,7 @@ def absorption_coefficient_conditional(
     frequency: ScalarFloat,
     mode: Literal["X", "O"],
     max_harmonic: int = 2,
+    n_quadrature_nodes: int = 24,
 ) -> ScalarFloat:
     """Compute the absorption coefficient if the density and temperature fulfill minimum
     requirements, otherwise return zero.
@@ -45,6 +45,8 @@ def absorption_coefficient_conditional(
             calculation. Determines the KO tensor FLR order and the number of
             resonance integrals evaluated. Must be a Python integer (compile-time
             constant for JIT).
+        n_quadrature_nodes: Gauss-Legendre nodes per resonance integral. Must be a
+            Python integer (compile-time constant for JIT).
 
     Returns:
         Absorption coefficient alpha in m^-1.
@@ -67,6 +69,7 @@ def absorption_coefficient_conditional(
             frequency=frequency,
             mode=mode,
             max_harmonic=max_harmonic,
+            n_quadrature_nodes=n_quadrature_nodes,
         ),
         lambda: 0.0,
     )
@@ -80,6 +83,7 @@ def absorption_coefficient(
     frequency: ScalarFloat,
     mode: Literal["X", "O"],
     max_harmonic: int = 2,
+    n_quadrature_nodes: int = 24,
 ) -> ScalarFloat:
     r"""Compute the absorption coefficient $\alpha$.
 
@@ -93,6 +97,8 @@ def absorption_coefficient(
         max_harmonic: Highest cyclotron harmonic to include. Determines the KO
             tensor FLR order and the number of resonance integrals evaluated.
             Must be a Python integer (compile-time constant for JIT).
+        n_quadrature_nodes: Gauss-Legendre nodes per resonance integral. Must be a
+            Python integer (compile-time constant for JIT).
 
     Returns:
         Absorption coefficient $\alpha$ in 1/m.
@@ -149,6 +155,7 @@ def absorption_coefficient(
         thermal_velocity=thermal_velocity,
         polarization_vector=polarization_vector,
         max_harmonic=max_harmonic,
+        n_quadrature_nodes=n_quadrature_nodes,
     )
     # Absorption coefficient: alpha = (omega/c) * eAe / |F|
     # where eAe = ê* · ε_r^A · ê is the anti-Hermitian dielectric form
@@ -178,6 +185,7 @@ def anti_hermitian_dielectric_form(
     thermal_velocity: ScalarFloat,
     polarization_vector: jt.Complex[jax.Array, "3"],
     max_harmonic: int = 2,
+    n_quadrature_nodes: int = 24,
 ) -> ScalarFloat:
     r"""Compute $\hat{e}^* \cdot \boldsymbol{\varepsilon}_r^A \cdot \hat{e}$, the
     anti-Hermitian part of the relative dielectric tensor contracted with the
@@ -210,6 +218,8 @@ def anti_hermitian_dielectric_form(
         thermal_velocity: Normalized electron thermal velocity (v_th / c).
         polarization_vector: Normalized polarization vector in Stix coordinates.
         max_harmonic: Highest cyclotron harmonic to include in the sum.
+        n_quadrature_nodes: Gauss-Legendre nodes per resonance integral. Must be a
+            Python integer (compile-time constant for JIT).
 
     Returns:
         The scalar quadratic form :math:`\hat{e}^* \cdot \boldsymbol{\varepsilon}_r^A \cdot \hat{e}` (dimensionless).
@@ -244,6 +254,7 @@ def anti_hermitian_dielectric_form(
                 refractive_index_perp=refractive_index_perp,
                 polarization_vector=polarization_vector,
                 thermal_velocity=thermal_velocity,
+                n_quadrature_nodes=n_quadrature_nodes,
             ),
         )
     Xp = (plasma_frequency / frequency) ** 2
@@ -258,6 +269,7 @@ def compute_resonance_integral(
     refractive_index_perp: ScalarFloat,
     polarization_vector: jt.Complex[jax.Array, "3"],
     thermal_velocity: ScalarFloat,
+    n_quadrature_nodes: int = 24,
 ) -> ScalarFloat:
     r"""Compute the resonance integral for the given harmonic.
 
@@ -281,6 +293,8 @@ def compute_resonance_integral(
         refractive_index_perp: Refractive index perpendicular to the magnetic field.
         polarization_vector: Normalized polarization vector in Stix coordinates.
         thermal_velocity: Normalized electron thermal velocity (v_th / c).
+        n_quadrature_nodes: Gauss-Legendre nodes per resonance integral. Must be a
+            Python integer (compile-time constant for JIT).
     """  # noqa: E501
     # Integration bounds from the resonance circle.  The conditions
     # γ = nY + N_∥·u_∥ and γ² = 1 + u_∥² + u_⊥² define a circle in the
@@ -306,16 +320,23 @@ def compute_resonance_integral(
     u_max_raw = u_res + delta_u
     resonance_in_bulk = jnp.minimum(jnp.abs(u_min_raw), jnp.abs(u_max_raw)) < u_cutoff
 
-    # γ is linear in u_∥ on the circle, so the distribution peaks at the circle end
-    # with the smaller γ and decays as exp(-μ|N_∥|Δu_∥) away from it; that decay
-    # length, usually far shorter than v_th, sets the support.
+    # On the circle γ = nY + N_∥·u_∥ is linear in u_∥, so f_MJ ∝ exp(-μγ), μ = 2/v_th²,
+    # peaks at the circle end with the smaller γ (u_min_raw for N_∥ > 0, u_max_raw for
+    # N_∥ < 0) and falls by a factor e every 1/(μ|N_∥|) in u_∥. That length is usually
+    # far shorter than v_th, so integrate from that end over _RESONANCE_EFOLDINGS of
+    # these lengths only, or the whole circle if shorter (always for N_∥ → 0).
+    mu = 2 / thermal_velocity**2
+    efolding_length = 1 / (mu * jnp.maximum(jnp.abs(n_para), 1e-12))
+    support = _RESONANCE_EFOLDINGS * efolding_length
+    u_min = jnp.where(
+        n_para < 0, jnp.maximum(u_min_raw, u_max_raw - support), u_min_raw
+    )
+    u_max = jnp.where(
+        n_para < 0, u_max_raw, jnp.minimum(u_max_raw, u_min_raw + support)
+    )
     # For N_∥ → 1 the resonance circle diverges; zero the contribution since the
     # quasi-longitudinal regime is outside ECH validity.
-    mu = 2 / thermal_velocity**2
-    window = _RESONANCE_EFOLDINGS / (mu * jnp.maximum(jnp.abs(n_para), 1e-12))
     near_lightline = jnp.abs(denom) < 1e-4
-    u_min = jnp.where(n_para < 0, jnp.maximum(u_min_raw, u_max_raw - window), u_min_raw)
-    u_max = jnp.where(n_para < 0, u_max_raw, jnp.minimum(u_max_raw, u_min_raw + window))
     u_min = jnp.where(near_lightline, 0.0, u_min)
     u_max = jnp.where(near_lightline, 0.0, u_max)
 
@@ -330,9 +351,11 @@ def compute_resonance_integral(
 
         # The integrand is analytic on the window and vanishes at the circle
         # ends, so Gauss-Legendre converges exponentially.
+        nodes, weights = np.polynomial.legendre.leggauss(n_quadrature_nodes)
         half_width = 0.5 * (u_max - u_min)
-        u_grid = half_width * _GAUSS_NODES + 0.5 * (u_max + u_min)
+        u_grid = half_width * nodes + 0.5 * (u_max + u_min)
 
+        # Compute the integrand values
         integrand_values = jax.vmap(
             lambda u: resonance_integrand(
                 harmonic_index=harmonic_index,
@@ -346,7 +369,8 @@ def compute_resonance_integral(
                 polarization_vector=polarization_vector,
             )
         )(u_grid)
-        return half_width * jnp.dot(_GAUSS_WEIGHTS, integrand_values)
+        # Integrate using Gauss-Legendre quadrature
+        return half_width * jnp.dot(weights, integrand_values)
 
     return jax.lax.cond(resonance_in_bulk, compute_integral, lambda: 0.0)
 
