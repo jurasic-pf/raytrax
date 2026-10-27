@@ -54,7 +54,6 @@ def _bin_volumes(
     return jnp.maximum(dvolume_drho * jnp.diff(edges), _MIN_BIN_VOLUME)
 
 
-# Eager, the binning dispatches hundreds of small ops per call; compiled per length bucket.
 @jax.jit
 def _bin_power_deposition(
     rho_grid: jt.Float[jax.Array, " nrho"],
@@ -187,8 +186,6 @@ def _deposition_stats(
     )
 
 
-# Jitted so the interpolators are built inside the compiled program, not op by op
-# on every call.
 @jax.jit
 def _run_trace(
     magnetic_configuration: MagneticConfiguration,
