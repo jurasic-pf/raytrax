@@ -200,10 +200,9 @@ class TracerSettings:
     """Absolute tolerance of the adaptive step-size controller."""
 
     max_step_size: float = 0.05
-    """Maximum ODE step size in metres (arc length). In vacuum the error estimate is
-    zero and the step grows tenfold per step, so this cap keeps the solver from
-    stepping over the plasma; keep it below the shortest plasma chord. Within the
-    plasma the tolerances set the step size, not this cap."""
+    """Maximum ODE step size in metres (arc length). Decreasing this improves
+    accuracy at the cost of more steps. In vacuum the error estimate is zero, so this
+    cap also keeps the solver from stepping over the plasma."""
 
     max_arc_length: float = 20.0
     """Maximum arc length to integrate in metres before the solver gives up."""

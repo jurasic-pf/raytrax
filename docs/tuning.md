@@ -26,9 +26,9 @@ The four float fields are ordinary JAX values (not static compile-time constants
 
 ### When to Adjust the Settings
 
-**`relative_tolerance` / `absolute_tolerance`** set the step size inside the plasma and are the parameters that control accuracy. The adaptive controller ([`Bosh3`](https://docs.kidger.site/diffrax/api/solvers/ode_solvers/#diffrax.Bosh3) + a PI [`PIDController`](https://docs.kidger.site/diffrax/api/stepsize_controller/#diffrax.PIDController)) keeps the estimated per-step error below `atol + rtol * |y|`. Because the interpolated equilibrium and profiles make the right-hand side only piecewise smooth, the error falls only about quadratically with the number of steps. The defaults are sufficient for power deposition profiles; gradient-based optimisation may benefit from tighter tolerances.
+**`max_step_size`** is the most impactful parameter. The adaptive controller ([`Bosh3`](https://docs.kidger.site/diffrax/api/solvers/ode_solvers/#diffrax.Bosh3) + a PI [`PIDController`](https://docs.kidger.site/diffrax/api/stepsize_controller/#diffrax.PIDController)) will take steps smaller than this when needed, but never larger. Reducing it forces finer integration near caustics or in steep-gradient regions — at the cost of more steps. In vacuum the error estimate is zero, so this cap is also what keeps the solver from stepping over the plasma.
 
-**`max_step_size`** is a safety cap, not an accuracy parameter. In vacuum the ray is a straight line, so the error estimate is zero and the step size grows tenfold per step; without the cap, a step can jump over the entire plasma. Keep it below the shortest plasma chord a ray can cross.
+**`relative_tolerance` / `absolute_tolerance`** control the error estimate the PID controller tries to satisfy per step. Tightening them (e.g. `rtol=1e-6`) improves accuracy but increases the number of steps. The defaults are sufficient for power deposition profiles; gradient-based optimisation may benefit from tighter tolerances.
 
 **`max_arc_length`** is a safety cutoff. Rays that haven't terminated (by leaving the plasma or being absorbed) are stopped at this arc length. 20 m is generous for any current fusion device; you would only need to lower it to speed up debugging of misconfigured inputs, or raise it for very large devices.
 
