@@ -433,8 +433,8 @@ def cylindrical_grid_for_equilibrium(
         values[p, inside, 0] = rho[inside]
         values[p, inside, 1:] = harmonics.b_cylindrical(p, rho[inside], theta[inside])
     rphiz = np.stack(np.meshgrid(r_grid, phis, z_grid, indexing="ij"), axis=-1)
-    values = values.reshape(n_phi, n_r, n_z, 4).transpose(1, 0, 2, 3)
-    return jnp.asarray(np.concatenate([rphiz, values], axis=-1))
+    nodes = values.reshape(n_phi, n_r, n_z, 4).transpose(1, 0, 2, 3)
+    return jnp.asarray(np.concatenate([rphiz, nodes], axis=-1))
 
 
 def _invert(
