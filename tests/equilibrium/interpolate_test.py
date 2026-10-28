@@ -167,11 +167,15 @@ def test_cylindrical_grid_nodes_are_exact(torus_wout):
     )
 
 
-def test_unconverged_nodes_keep_last_iterate(torus_wout, monkeypatch):
-    """A node whose Newton never reports convergence keeps its iterate, not NaN."""
+def test_unconverged_nodes_keep_best_iterate(torus_wout, monkeypatch):
+    """A node whose Newton never reports convergence keeps its best iterate, not NaN."""
     # Zero tolerances turn the Cauchy test into inf/NaN < 1, so every node exhausts
     # max_steps without being flagged as converged.
-    monkeypatch.setattr(interpolate, "_NEWTON", optx.Newton(rtol=0.0, atol=0.0))
+    monkeypatch.setattr(
+        interpolate,
+        "_NEWTON",
+        optx.BestSoFarRootFinder(optx.Newton(rtol=0.0, atol=0.0)),
+    )
     grid = np.asarray(
         cylindrical_grid_for_equilibrium(
             equilibrium=torus_wout, n_rho=10, n_theta=8, n_phi=6, n_r=15, n_z=17

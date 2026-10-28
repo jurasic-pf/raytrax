@@ -235,7 +235,10 @@ def interpolate_toroidal_to_cylindrical_grid(
     return jnp.stack(values, axis=1)
 
 
-_NEWTON: optx.Newton = optx.Newton(rtol=1e-12, atol=1e-12)
+# Best-so-far: a node that does not converge keeps its smallest-residual iterate.
+_NEWTON: optx.AbstractRootFinder = optx.BestSoFarRootFinder(
+    optx.Newton(rtol=1e-12, atol=1e-12)
+)
 
 
 @jt.jaxtyped(typechecker=typechecker)
@@ -432,7 +435,7 @@ def _node_values(
             b_theta * series_theta[1].imag + b_phi * series[3].imag,
         ]
     )
-    # An unconverged node keeps its last iterate: NaN would read downstream as
+    # An unconverged node keeps its best iterate: NaN would read downstream as
     # vacuum (rho = 1.1, B = 0), a hole in the plasma.
     return jnp.where(rho <= rho_max, jnp.append(rho, b_cylindrical), jnp.nan)
 
