@@ -10,7 +10,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
-from typing import TYPE_CHECKING
+from functools import partial
+from typing import TYPE_CHECKING, NamedTuple
 
 if TYPE_CHECKING:
     import pyvista as pv
@@ -19,15 +20,17 @@ import interpax
 import jax
 import jax.numpy as jnp
 import jaxtyping as jt
+import matplotlib.path
 import numpy as np
+import optimistix as optx
 from beartype import beartype as typechecker
 from scipy.interpolate import griddata
-from scipy.spatial import cKDTree
 
 from raytrax.equilibrium.protocol import WoutLike
 from raytrax.types import RadialProfiles, SafetensorsMixin
 
 from .fourier import dvolume_drho as compute_dvolume_drho
+from .fourier import evaluate_rphiz_on_toroidal_grid, extrapolate_coefficients
 
 
 @dataclass
@@ -232,141 +235,7 @@ def interpolate_toroidal_to_cylindrical_grid(
     return jnp.stack(values, axis=1)
 
 
-# Absolute (R, Z) residual in metres: the round-off level of the Fourier sums.
-_NEWTON_TOLERANCE = 1e-12
-_NEWTON_MAX_ITERATIONS = 30
-
-
-@dataclass(frozen=True)
-class _PlaneHarmonics:
-    """VMEC geometry and field per phi plane as complex theta harmonics a_m(rho):
-    a cosine series is Re sum_m a_m exp(i m theta), a sine series the Im part."""
-
-    sqrt_s_full: np.ndarray
-    sqrt_s_half: np.ndarray
-    # Cubic pieces in rho per plane, interval, power, quantity, m.
-    geometry: np.ndarray  # (R, Z)
-    geometry_phi: np.ndarray  # (dR/dphi, dZ/dphi)
-    field: np.ndarray  # (B^theta, B^phi)
-
-    @classmethod
-    def of(cls, equilibrium: WoutLike, phis: np.ndarray) -> _PlaneHarmonics:
-        ns = equilibrium.ns
-        ds = 1 / (ns - 1)
-        sqrt_s_full = np.sqrt(np.linspace(0, 1, ns))
-        sqrt_s_half = np.sqrt(np.linspace(ds / 2, 1 - ds / 2, ns - 1))
-        xm, xn = np.asarray(equilibrium.xm), np.asarray(equilibrium.xn)
-        rz = [np.asarray(equilibrium.rmnc), np.asarray(equilibrium.zmns)]
-        b = [np.asarray(c)[:, 1:] for c in (equilibrium.bsupumnc, equilibrium.bsupvmnc)]
-        return cls(
-            sqrt_s_full=sqrt_s_full,
-            sqrt_s_half=sqrt_s_half,
-            geometry=_cubic_pieces(sqrt_s_full, _harmonics(rz, xm, xn, phis, 1)),
-            geometry_phi=_cubic_pieces(
-                sqrt_s_full, _harmonics(rz, xm, xn, phis, -1j * xn)
-            ),
-            field=_cubic_pieces(
-                sqrt_s_half,
-                _harmonics(
-                    b,
-                    np.asarray(equilibrium.xm_nyq),
-                    np.asarray(equilibrium.xn_nyq),
-                    phis,
-                    1,
-                ),
-            ),
-        )
-
-    def rz(
-        self, plane: int, rho: np.ndarray, theta: np.ndarray
-    ) -> tuple[np.ndarray, ...]:
-        """R, Z, dR/drho, dR/dtheta, dZ/drho, dZ/dtheta, with the C¹ linear
-        continuation beyond rho = 1 that `evaluate_rphiz_on_toroidal_grid` uses."""
-        rho_inside = np.minimum(rho, 1.0)
-        a, a_rho = _cubic(self.sqrt_s_full, self.geometry[plane], rho_inside)
-        a = a + (rho - rho_inside)[:, None, None] * a_rho
-        m = np.arange(a.shape[-1])
-        e = np.exp(1j * np.outer(theta, m))[:, None]
-        f, f_rho, f_theta = ((c * e).sum(-1) for c in (a, a_rho, 1j * m * a))
-        return (
-            f[:, 0].real,
-            f[:, 1].imag,
-            f_rho[:, 0].real,
-            f_theta[:, 0].real,
-            f_rho[:, 1].imag,
-            f_theta[:, 1].imag,
-        )
-
-    def b_cylindrical(
-        self, plane: int, rho: np.ndarray, theta: np.ndarray
-    ) -> np.ndarray:
-        """(B_R, B_phi, B_Z) with B held at its LCMS value beyond rho = 1."""
-        rho = np.minimum(rho, 1.0)
-        r, _, _, r_theta, _, z_theta = self.rz(plane, rho, theta)
-        rz_phi = _series(self.sqrt_s_full, self.geometry_phi[plane], rho, theta)
-        b_theta, b_phi = _series(self.sqrt_s_half, self.field[plane], rho, theta).real.T
-        return np.stack(
-            [
-                b_theta * r_theta + b_phi * rz_phi[:, 0].real,
-                b_phi * r,
-                b_theta * z_theta + b_phi * rz_phi[:, 1].imag,
-            ],
-            axis=-1,
-        )
-
-
-def _harmonics(
-    coefficients: list[np.ndarray],
-    xm: np.ndarray,
-    xn: np.ndarray,
-    phis: np.ndarray,
-    weight: complex | np.ndarray,
-) -> np.ndarray:
-    """a_m per plane, knot and quantity with
-    sum_k weight_k c_k exp(i (m_k theta - n_k phi)) = sum_m a_m exp(i m theta)."""
-    phase = weight * np.exp(-1j * np.outer(phis, xn))
-    one_hot = np.eye(xm.max() + 1)[xm]
-    return np.einsum(
-        "qkj,pk,km->pjqm", np.stack(coefficients), phase, one_hot, optimize=True
-    )
-
-
-def _cubic_pieces(knots: np.ndarray, values: np.ndarray) -> np.ndarray:
-    """Per interval, the coefficients of t^0..t^3 (t in [0, 1] across the interval)
-    of the cubic Hermite spline interpax's "cubic" interp1d builds along axis 1."""
-    x = jnp.asarray(knots)
-    slopes = np.asarray(
-        interpax.approx_df(x, jnp.asarray(values.real), "cubic", axis=1)
-    ) + 1j * np.asarray(
-        interpax.approx_df(x, jnp.asarray(values.imag), "cubic", axis=1)
-    )
-    dx = np.diff(knots)[:, None, None]
-    f0, f1 = values[:, :-1], values[:, 1:]
-    d0, d1 = slopes[:, :-1] * dx, slopes[:, 1:] * dx
-    return np.stack(
-        [f0, d0, 3 * (f1 - f0) - 2 * d0 - d1, 2 * (f0 - f1) + d0 + d1], axis=2
-    )
-
-
-def _series(
-    knots: np.ndarray, pieces: np.ndarray, rho: np.ndarray, theta: np.ndarray
-) -> np.ndarray:
-    a, _ = _cubic(knots, pieces, rho)
-    e = np.exp(1j * np.outer(theta, np.arange(a.shape[-1])))[:, None]
-    return (a * e).sum(-1)
-
-
-def _cubic(
-    knots: np.ndarray, pieces: np.ndarray, x: np.ndarray
-) -> tuple[np.ndarray, np.ndarray]:
-    """Spline value and x-derivative, extrapolating the end pieces like interpax."""
-    i = np.clip(np.searchsorted(knots, x, side="right"), 1, len(knots) - 1) - 1
-    dx = (knots[i + 1] - knots[i])[:, None, None]
-    t = (x - knots[i])[:, None, None] / dx
-    a0, a1, a2, a3 = np.moveaxis(pieces[i], 1, 0)
-    value = ((a3 * t + a2) * t + a1) * t + a0
-    derivative = ((3 * a3 * t + 2 * a2) * t + a1) / dx
-    return value, derivative
+_NEWTON: optx.Newton = optx.Newton(rtol=1e-12, atol=1e-12)
 
 
 @jt.jaxtyped(typechecker=typechecker)
@@ -395,84 +264,195 @@ def cylindrical_grid_for_equilibrium(
         )
     # Each node's flux coordinates are found by Newton on (R, Z)(rho, theta) in the
     # node's phi plane, so rho and B are exact at the nodes rather than interpolated
-    # across a triangulation. Per plane the Fourier sums collapse to harmonics in
-    # theta; splines are linear in their data, so this reproduces the radial
-    # interpolation of the coefficients exactly while costing O(m_max) per point.
-    phis = np.linspace(0, np.pi / equilibrium.nfp, n_phi)
-    harmonics = _PlaneHarmonics.of(equilibrium, phis)
+    # across a triangulation of a toroidal grid.
+    phis = jnp.linspace(0, jnp.pi / equilibrium.nfp, n_phi)
     rho_max = 1.2  # extend beyond the LCMS to allow extrapolation
-    rho_sample, theta_sample = np.meshgrid(
-        np.linspace(0, rho_max, n_rho), np.linspace(0, 2 * np.pi, n_theta)
+    rho_theta_phi = jnp.stack(
+        jnp.meshgrid(
+            jnp.linspace(0, rho_max, n_rho),
+            jnp.linspace(0, 2 * jnp.pi, n_theta),
+            phis,
+            indexing="ij",
+        ),
+        axis=-1,
     )
-    sample = [
-        harmonics.rz(p, rho_sample.ravel(), theta_sample.ravel())[:2]
-        for p in range(n_phi)
-    ]
-    r_grid = np.linspace(
-        min(r.min() for r, _ in sample), max(r.max() for r, _ in sample), n_r
+    rphiz = evaluate_rphiz_on_toroidal_grid(equilibrium, rho_theta_phi)
+    r_grid = jnp.linspace(rphiz[..., 0].min(), rphiz[..., 0].max(), n_r)
+    z_grid = jnp.linspace(rphiz[..., 2].min(), rphiz[..., 2].max(), n_z)
+    rphiz_cylindrical = jnp.stack(
+        jnp.meshgrid(r_grid, phis, z_grid, indexing="ij"), axis=-1
     )
-    z_grid = np.linspace(
-        min(z.min() for _, z in sample), max(z.max() for _, z in sample), n_z
+    ns = equilibrium.ns
+    ds = 1 / (ns - 1)
+    xn = jnp.asarray(equilibrium.xn)[:, None]
+    # R, Z and their phi derivatives: d/dphi exp(-i n phi) = -i n exp(-i n phi).
+    # Newton only needs the first two, so it gets its own, cheaper spline.
+    geometry = _ThetaHarmonics(
+        knots=jnp.sqrt(jnp.linspace(0, 1, ns)),
+        coefficients=jnp.stack(
+            [
+                jnp.asarray(equilibrium.rmnc),
+                jnp.asarray(equilibrium.zmns),
+                -1j * xn * jnp.asarray(equilibrium.rmnc),
+                -1j * xn * jnp.asarray(equilibrium.zmns),
+            ]
+        ),
+        xm=jnp.asarray(equilibrium.xm),
+        xn=jnp.asarray(equilibrium.xn),
+        m_max=int(np.max(equilibrium.xm)),
     )
-    r_nodes, z_nodes = (a.ravel() for a in np.meshgrid(r_grid, z_grid, indexing="ij"))
+    field = _ThetaHarmonics(
+        knots=jnp.sqrt(jnp.linspace(ds / 2, 1 - ds / 2, ns - 1)),
+        coefficients=jnp.stack(
+            [
+                jnp.asarray(equilibrium.bsupumnc)[:, 1:],
+                jnp.asarray(equilibrium.bsupvmnc)[:, 1:],
+            ]
+        ),
+        xm=jnp.asarray(equilibrium.xm_nyq),
+        xn=jnp.asarray(equilibrium.xn_nyq),
+        m_max=int(np.max(equilibrium.xm_nyq)),
+    )
+    nodes = np.moveaxis(np.asarray(rphiz_cylindrical), 1, 0).reshape(n_phi, -1, 3)
+    # Newton only runs on nodes inside a finely sampled ring a bit beyond rho_max;
+    # the rest of the box is outside the domain. Each plane is padded to the same
+    # node count so the solve compiles once.
+    ring = np.asarray(
+        evaluate_rphiz_on_toroidal_grid(
+            equilibrium,
+            jnp.stack(
+                jnp.meshgrid(
+                    jnp.array([1.05 * rho_max]),
+                    jnp.linspace(0, 2 * jnp.pi, 256),
+                    phis,
+                    indexing="ij",
+                ),
+                axis=-1,
+            ),
+        )[0]
+    )
+    solve = np.stack(
+        [
+            matplotlib.path.Path(ring[:, p, ::2]).contains_points(nodes[p, :, ::2])
+            for p in range(n_phi)
+        ]
+    )
+    selected = np.argsort(~solve, axis=1, kind="stable")[:, : solve.sum(1).max()]
+    # Samples off the axis seed Newton: (rho, theta) is singular there.
+    solved = jax.lax.map(
+        partial(_plane_values, geometry, field, rho_max),
+        (
+            phis,
+            jnp.asarray(np.take_along_axis(nodes, selected[..., None], axis=1)),
+            jnp.moveaxis(rho_theta_phi[1:], 2, 0).reshape(n_phi, -1, 3),
+            jnp.moveaxis(rphiz[1:], 2, 0).reshape(n_phi, -1, 3),
+        ),
+    )
     values = np.full((n_phi, n_r * n_z, 4), np.nan)
-    for p, (r, z) in enumerate(sample):
-        _, nearest = cKDTree(np.stack([r, z], -1)).query(
-            np.stack([r_nodes, z_nodes], -1)
-        )
-        rho, theta = _invert(
-            harmonics,
-            p,
-            r_nodes,
-            z_nodes,
-            rho_sample.ravel()[nearest],
-            theta_sample.ravel()[nearest],
-            rho_max,
-        )
-        inside = np.isfinite(rho)
-        values[p, inside, 0] = rho[inside]
-        values[p, inside, 1:] = harmonics.b_cylindrical(p, rho[inside], theta[inside])
-    rphiz = np.stack(np.meshgrid(r_grid, phis, z_grid, indexing="ij"), axis=-1)
-    nodes = values.reshape(n_phi, n_r, n_z, 4).transpose(1, 0, 2, 3)
-    return jnp.asarray(np.concatenate([rphiz, nodes], axis=-1))
+    planes = np.arange(n_phi)[:, None]
+    values[planes, selected] = np.where(
+        np.take_along_axis(solve, selected, axis=1)[..., None], solved, np.nan
+    )
+    values_rphiz = np.moveaxis(values.reshape(n_phi, n_r, n_z, 4), 0, 1)
+    return jnp.concatenate([rphiz_cylindrical, jnp.asarray(values_rphiz)], axis=-1)
 
 
-def _invert(
-    geometry: _PlaneHarmonics,
-    plane: int,
-    r: np.ndarray,
-    z: np.ndarray,
-    rho: np.ndarray,
-    theta: np.ndarray,
+class _ThetaHarmonics(NamedTuple):
+    """Fourier series sum_mn c_mn(rho) exp(i (m theta - n phi)) per quantity."""
+
+    knots: jax.Array
+    coefficients: jax.Array
+    xm: jax.Array
+    xn: jax.Array
+    m_max: int
+
+    def in_plane(self, phi: jax.Array) -> interpax.Interpolator1D:
+        """Spline in rho of a_m with series = sum_m a_m(rho) exp(i m theta) at phi."""
+        phased = self.coefficients * jnp.exp(-1j * self.xn * phi)[:, None]
+        a_m = jax.vmap(
+            partial(
+                jax.ops.segment_sum,
+                segment_ids=self.xm,
+                num_segments=self.m_max + 1,
+            )
+        )(phased)
+        return interpax.Interpolator1D(
+            self.knots, jnp.moveaxis(a_m, -1, 0), extrap=True
+        )
+
+
+def _plane_values(
+    geometry: _ThetaHarmonics,
+    field: _ThetaHarmonics,
     rho_max: float,
-) -> tuple[np.ndarray, np.ndarray]:
-    """(rho, theta) of the points (r, z) in a phi plane by Newton; NaN beyond rho_max."""
-    # The (rho, theta) map is singular on the axis, so start Newton just off it.
-    rho, theta = np.maximum(rho, 1e-3), theta.copy()
-    active = np.arange(len(r))
-    residual = np.full(len(r), np.inf)
-    for _ in range(_NEWTON_MAX_ITERATIONS):
-        rr, zz, r_rho, r_theta, z_rho, z_theta = geometry.rz(
-            plane, rho[active], theta[active]
-        )
-        dr, dz = rr - r[active], zz - z[active]
-        residual[active] = np.hypot(dr, dz)
-        det = r_rho * z_theta - r_theta * z_rho
-        # A singular step makes the point non-finite, which drops it as unconverged.
-        with np.errstate(divide="ignore", invalid="ignore"):
-            rho[active] -= (z_theta * dr - r_theta * dz) / det
-            theta[active] -= (r_rho * dz - z_rho * dr) / det
-        # A step through the axis lands at rho < 0; (|rho|, theta + pi) is the same
-        # point to leading order in rho.
-        flip = rho[active] < 0
-        rho[active[flip]] *= -1
-        theta[active[flip]] += np.pi
-        keep = (residual[active] > _NEWTON_TOLERANCE) & (rho[active] < rho_max + 0.1)
-        active = active[keep]
-        if active.size == 0:
-            break
-    converged = (residual <= _NEWTON_TOLERANCE) & (rho <= rho_max)
-    return np.where(converged, rho, np.nan), theta
+    plane: tuple[jax.Array, jax.Array, jax.Array, jax.Array],
+) -> jax.Array:
+    """(rho, B_R, B_phi, B_Z) at the nodes of one phi plane; NaN beyond rho_max."""
+    phi, nodes, sample_rho_theta_phi, sample_rphiz = plane
+    distance = jnp.linalg.norm(
+        nodes[:, None, ::2] - sample_rphiz[None, :, ::2], axis=-1
+    )
+    guess = sample_rho_theta_phi[jnp.argmin(distance, axis=1)]
+    geometry_in_plane = geometry.in_plane(phi)
+    rz = interpax.Interpolator1D(
+        geometry_in_plane.x, geometry_in_plane.f[:, :2], extrap=True
+    )
+    return jax.vmap(
+        partial(_node_values, rz, geometry_in_plane, field.in_plane(phi), rho_max)
+    )(nodes[:, ::2], guess[:, :2])
+
+
+def _node_values(
+    rz_harmonics: interpax.Interpolator1D,
+    geometry: interpax.Interpolator1D,
+    field: interpax.Interpolator1D,
+    rho_max: float,
+    rz: jax.Array,
+    guess: jax.Array,
+) -> jax.Array:
+    # Solve for rho (cos theta, sin theta), which unlike (rho, theta) is a smooth
+    # chart through the axis, so a Newton step across it needs no special case.
+    solution: optx.Solution = optx.root_find(
+        _rz_residual,
+        _NEWTON,
+        guess[0] * jnp.stack([jnp.cos(guess[1]), jnp.sin(guess[1])]),
+        args=(rz_harmonics, rz),
+        max_steps=30,
+        throw=False,
+    )
+    rho = jnp.linalg.norm(solution.value)
+    theta = jnp.arctan2(solution.value[1], solution.value[0])
+    # B is held at its LCMS value beyond rho = 1.
+    series, series_theta = _sum_harmonics(geometry, jnp.minimum(rho, 1.0), theta)
+    b_theta, b_phi = _sum_harmonics(field, jnp.minimum(rho, 1.0), theta)[0].real
+    b_cylindrical = jnp.stack(
+        [
+            b_theta * series_theta[0].real + b_phi * series[2].real,
+            b_phi * series[0].real,
+            b_theta * series_theta[1].imag + b_phi * series[3].imag,
+        ]
+    )
+    converged = (solution.result == optx.RESULTS.successful) & (rho <= rho_max)
+    return jnp.where(converged, jnp.append(rho, b_cylindrical), jnp.nan)
+
+
+def _rz_residual(
+    y: jax.Array, args: tuple[interpax.Interpolator1D, jax.Array]
+) -> jax.Array:
+    rz_harmonics, rz = args
+    a_m = extrapolate_coefficients(rz_harmonics, jnp.linalg.norm(y)[None])[0]
+    series = a_m @ jnp.exp(1j * jnp.arange(a_m.shape[-1]) * jnp.arctan2(y[1], y[0]))
+    return jnp.stack([series[0].real, series[1].imag]) - rz
+
+
+def _sum_harmonics(
+    harmonics: interpax.Interpolator1D, rho: jax.Array, theta: jax.Array
+) -> tuple[jax.Array, jax.Array]:
+    """sum_m a_m exp(i m theta) and its theta derivative, per quantity."""
+    a_m = extrapolate_coefficients(harmonics, rho[None])[0]
+    m = jnp.arange(a_m.shape[-1])
+    phase = jnp.exp(1j * m * theta)
+    return a_m @ phase, a_m @ (1j * m * phase)
 
 
 def build_magnetic_field_interpolator(

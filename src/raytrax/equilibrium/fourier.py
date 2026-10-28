@@ -108,16 +108,20 @@ def _extrapolated_coefficients(
     fourier_coefficients: jt.Float[jax.Array, "n_fourier_coefficients n_s"],
     rho: jt.Float[jax.Array, " n_rho"],
 ) -> jt.Float[jax.Array, "n_fourier_coefficients n_rho"]:
-    """Coefficients at rho, continued linearly beyond rho = 1 with the slope there."""
     sqrt_s = jnp.sqrt(jnp.linspace(0, 1, fourier_coefficients.shape[1]))
+    spline = interpax.Interpolator1D(
+        sqrt_s, jnp.asarray(fourier_coefficients).T, extrap=True
+    )
+    return extrapolate_coefficients(spline, rho).T
+
+
+def extrapolate_coefficients(
+    spline: interpax.Interpolator1D, rho: jt.Float[jax.Array, " n_rho"]
+) -> jax.Array:
+    """Spline values at rho, continued linearly beyond rho = 1 with the slope there."""
     rho_inside = jnp.clip(rho, 0.0, 1.0)
-    inside = interpax.interp1d(
-        rho_inside, sqrt_s, jnp.asarray(fourier_coefficients).T, extrap=True
-    )
-    slope = interpax.interp1d(
-        jnp.ones(1), sqrt_s, jnp.asarray(fourier_coefficients).T, derivative=1
-    )
-    return (inside + (rho - rho_inside)[:, None] * slope).T
+    step = (rho - rho_inside).reshape(-1, *[1] * (spline.f.ndim - 1))
+    return spline(rho_inside) + step * spline(jnp.ones(1), dx=1)
 
 
 @jt.jaxtyped(typechecker=typechecker)
