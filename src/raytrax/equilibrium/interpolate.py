@@ -432,8 +432,9 @@ def _node_values(
             b_theta * series_theta[1].imag + b_phi * series[3].imag,
         ]
     )
-    converged = (solution.result == optx.RESULTS.successful) & (rho <= rho_max)
-    return jnp.where(converged, jnp.append(rho, b_cylindrical), jnp.nan)
+    # An unconverged node keeps its last iterate: NaN would read downstream as
+    # vacuum (rho = 1.1, B = 0), a hole in the plasma.
+    return jnp.where(rho <= rho_max, jnp.append(rho, b_cylindrical), jnp.nan)
 
 
 def _rz_residual(
