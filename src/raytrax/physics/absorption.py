@@ -263,7 +263,7 @@ def anti_hermitian_dielectric_form(
 
 
 def compute_resonance_integral(
-    harmonic_index: ScalarInt,
+    harmonic_index: int,
     cyclotron_frequency: ScalarFloat,
     frequency: ScalarFloat,
     refractive_index_para: ScalarFloat,
@@ -329,9 +329,7 @@ def compute_resonance_integral(
     # only as far as needed to reach the requested relative accuracy, or the
     # whole curve if it is shorter.
     mu = 2 / thermal_velocity**2
-    n_decay_lengths, n_nodes = _resonance_quadrature(
-        resonance_rtol, int(harmonic_index)
-    )
+    n_decay_lengths, n_nodes = _resonance_quadrature(resonance_rtol, harmonic_index)
     nodes, weights = np.polynomial.legendre.leggauss(n_nodes)
     decay_length = 1 / (mu * jnp.maximum(jnp.abs(n_para), 1e-12))
     window_length = n_decay_lengths * decay_length
@@ -388,6 +386,9 @@ def _resonance_quadrature(rtol: float, harmonic_index: int) -> tuple[float, int]
     harmonic), so the tail beyond a window K is ~K^n e^-K, and N Gauss-Legendre nodes
     integrate e^-t over [0, K] to ~(K/4)^(2N) / (2N)! ≈ (eK / 8N)^(2N).
     """
+    # Below ln(1/rtol) = 1 the log term flips sign and the window can vanish.
+    if not 0 < rtol < 1 / math.e:
+        raise ValueError(f"resonance_rtol must be in (0, 1/e), got {rtol}")
     log_inv_rtol = math.log(1 / rtol)
     window = log_inv_rtol + harmonic_index * math.log(log_inv_rtol)
     growth = math.exp(lambertw(4 * log_inv_rtol / (math.e * window)).real)
