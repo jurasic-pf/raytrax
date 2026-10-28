@@ -363,5 +363,5 @@ def trace(
         optical_depth=tau_final,
         deposition_rho_mean=rho_mean,
         deposition_rho_std=rho_std,
-        incomplete=result.incomplete,
+        incomplete=jnp.asarray(result.incomplete),
     )
