@@ -493,6 +493,8 @@ def test_ko_tensor_reduces_to_cold_in_low_temperature_limit():
         pytest.param(1, 1.01, 1e-3, 2.0, id="npar-near-zero-whole-circle"),
         # Low-γ end at 5 v_th: the integrand still contributes beyond 7 v_th.
         pytest.param(1, 0.9034, 0.44, 1.4, id="tail-beyond-7-vth"),
+        pytest.param(3, 1.0, 0.3, 10.0, id="third-harmonic"),
+        pytest.param(4, 1.0, 0.3, 20.0, id="fourth-harmonic"),
     ],
 )
 def test_resonance_integral_matches_quadrature_over_whole_circle(
