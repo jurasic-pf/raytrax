@@ -29,6 +29,15 @@ def _jv_series(v, z):
     return half_z**v * total
 
 
+def jv_series_q(order: int, q, n_terms: int):
+    """S with J_order(z) = (z/2)^order S(z^2/4), from the first n_terms of its series."""
+    coefficients = [
+        (-1) ** k / (math.factorial(k) * math.factorial(k + order))
+        for k in range(n_terms)
+    ]
+    return jnp.polyval(jnp.asarray(coefficients[::-1]), q)
+
+
 @partial(jax.custom_jvp, nondiff_argnums=(0,))
 def jv_jax(v, z):
     """Compute the Bessel function of the first kind of integer order.

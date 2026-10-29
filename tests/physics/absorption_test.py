@@ -589,3 +589,41 @@ def test_resonance_integral_matches_quadrature_over_whole_circle(
     np.testing.assert_allclose(
         absorption.compute_resonance_integral(**args), reference, rtol=1e-12, atol=0
     )
+
+
+def test_truncated_bessel_series_keeps_absorption(monkeypatch):
+    """The per-harmonic J_n term counts change alpha by < 1e-12 relative to 30 terms.
+
+    Hot second and third harmonic states reach the largest k_perp rho_L, where 8 terms
+    already miss by 5e-12."""
+    rng = np.random.default_rng(0)
+    n = 400
+    harmonic = rng.integers(2, 4, n)
+    b_mag = _FREQ / harmonic * rng.uniform(0.85, 1.15, n) / 27.99e9
+    theta = rng.uniform(0.2, np.pi - 0.2, n)
+    n_mag = rng.uniform(0.3, 1.0, n)
+    states = (
+        jnp.asarray(
+            np.stack([n_mag * np.cos(theta), n_mag * np.sin(theta), 0 * theta], 1)
+        ),
+        jnp.asarray(np.stack([b_mag, 0 * b_mag, 0 * b_mag], 1)),
+        jnp.asarray(rng.uniform(0.02, 1.0, n)),
+        jnp.asarray(np.exp(rng.uniform(np.log(10.0), np.log(50.0), n))),
+    )
+
+    def alpha():
+        return jax.jit(
+            jax.vmap(
+                lambda N, B, ne, te: absorption.absorption_coefficient(
+                    N, B, ne, te, _FREQ, "X", 3
+                )
+            )
+        )(*states)
+
+    truncated = alpha()
+    monkeypatch.setattr(absorption, "_JV_TERMS", {})
+    full = alpha()
+    significant = np.abs(full) > 1e-8 * np.max(np.abs(full))
+    np.testing.assert_allclose(
+        truncated[significant], full[significant], rtol=1e-12, atol=0
+    )
