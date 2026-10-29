@@ -364,6 +364,7 @@ def cylindrical_grid_for_equilibrium(
         geometry,
         field,
         rho_max,
+        _NEWTON,
         (
             phis,
             jnp.asarray(np.take_along_axis(nodes, selected[..., None], axis=1)),
@@ -410,21 +411,25 @@ class _ThetaHarmonics:
         )
 
 
-@partial(jax.jit, static_argnames="rho_max")
+@partial(jax.jit, static_argnames=("rho_max", "root_finder"))
 def _solve_planes(
     geometry: _ThetaHarmonics,
     field: _ThetaHarmonics,
     rho_max: float,
+    root_finder: optx.AbstractRootFinder,
     planes: tuple[jax.Array, jax.Array, jax.Array, jax.Array],
 ) -> jax.Array:
     # Sequential over planes: the nearest-seed search is nodes x seeds per plane.
-    return jax.lax.map(partial(_plane_values, geometry, field, rho_max), planes)
+    return jax.lax.map(
+        partial(_plane_values, geometry, field, rho_max, root_finder), planes
+    )
 
 
 def _plane_values(
     geometry: _ThetaHarmonics,
     field: _ThetaHarmonics,
     rho_max: float,
+    root_finder: optx.AbstractRootFinder,
     plane: tuple[jax.Array, jax.Array, jax.Array, jax.Array],
 ) -> jax.Array:
     """(rho, B_R, B_phi, B_Z) at the nodes of one phi plane; NaN beyond rho_max."""
@@ -438,7 +443,14 @@ def _plane_values(
         geometry_in_plane.x, geometry_in_plane.f[:, :2], extrap=True
     )
     return jax.vmap(
-        partial(_node_values, rz, geometry_in_plane, field.in_plane(phi), rho_max)
+        partial(
+            _node_values,
+            rz,
+            geometry_in_plane,
+            field.in_plane(phi),
+            rho_max,
+            root_finder,
+        )
     )(nodes[:, ::2], guess[:, :2])
 
 
@@ -447,6 +459,7 @@ def _node_values(
     geometry: interpax.Interpolator1D,
     field: interpax.Interpolator1D,
     rho_max: float,
+    root_finder: optx.AbstractRootFinder,
     rz: jax.Array,
     guess: jax.Array,
 ) -> jax.Array:
@@ -454,7 +467,7 @@ def _node_values(
     # chart through the axis, so a Newton step across it needs no special case.
     solution: optx.Solution = optx.root_find(
         _rz_residual,
-        _NEWTON,
+        root_finder,
         guess[0] * jnp.stack([jnp.cos(guess[1]), jnp.sin(guess[1])]),
         args=(rz_harmonics, rz),
         max_steps=10,
