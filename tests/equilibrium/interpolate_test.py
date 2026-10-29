@@ -1007,3 +1007,25 @@ def test_regular_grid_interpolator_matches_interpax():
         rtol=0.0,
         atol=1e-11,
     )
+
+
+def test_regular_grid_interpolator_matches_interpax_2d():
+    """The axisymmetric (R, Z) case agrees with interpax linear for a scalar field."""
+    import interpax
+
+    rng = np.random.default_rng(1)
+    x, z = jnp.linspace(1.0, 2.0, 7), jnp.linspace(-1.0, 1.0, 9)
+    f = jnp.asarray(rng.normal(size=(7, 9))).at[3, 4].set(jnp.nan)
+    ours = interpolate.RegularGridInterpolator(
+        lower=jnp.array([1.0, -1.0]), upper=jnp.array([2.0, 1.0]), f=f, fill=1.1
+    )
+    ref = interpax.Interpolator2D(
+        x, z, jnp.nan_to_num(f, nan=1.1), method="linear", extrap=1.1
+    )
+    points = jnp.asarray(rng.uniform([0.9, -1.1], [2.1, 1.1], size=(500, 2)))
+    np.testing.assert_allclose(
+        jax.vmap(lambda p: ours(*p))(points),
+        jax.vmap(lambda p: ref(*p))(points),
+        rtol=0.0,
+        atol=1e-13,
+    )

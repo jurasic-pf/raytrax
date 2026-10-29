@@ -92,7 +92,11 @@ class MagneticConfiguration(SafetensorsMixin):
     """
 
     rphiz: jt.Float[jax.Array, "npoints 3"]
-    r"""The ($R$, $\phi$, $Z$) coordinates of the points on the interpolation grid."""
+    r"""The ($R$, $\phi$, $Z$) coordinates of the points on the interpolation grid.
+
+    Must be a tensor grid that is uniformly spaced along each axis: the field and
+    $\rho$ are interpolated using only the first and last node of each axis.
+    """
 
     magnetic_field: jt.Float[jax.Array, "npoints 3"]
     r"""The magnetic field $(B_R, B_\phi, B_Z)$ in cylindrical components at each grid point."""
