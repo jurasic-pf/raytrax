@@ -77,8 +77,7 @@ _KV_SERIES_NTERMS = 50
 _KV_SWITCHOVER = 10.0
 
 
-# Series coefficients are fixed numbers, computed once here so that a call is a
-# polynomial evaluation instead of 50 exp/gammaln terms per series.
+# Precomputed series coefficients
 _K_FACTORIAL = np.array([math.factorial(k) for k in range(_KV_SERIES_NTERMS)], float)
 _K_HARMONIC = np.concatenate([[0.0], np.cumsum(1.0 / np.arange(1, _KV_SERIES_NTERMS))])
 _I0_COEFFICIENTS = 1.0 / _K_FACTORIAL**2
