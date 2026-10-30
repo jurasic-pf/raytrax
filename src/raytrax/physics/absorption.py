@@ -487,13 +487,6 @@ def resonance_integrand(
     return Dql * df_dgamma
 
 
-# Series terms for J_n and J_{n+1} per harmonic n. At 0.05-100 keV, |N_par| < 0.95 and
-# N_perp < 1.5 the window reaches |k_perp rho_L| ~ 8 for n = 2 and ~ 13 for n = 3, but
-# only in the e^-40 tail: these counts keep the series error times the integrand weight
-# below 1e-14. Higher harmonics keep 30 terms.
-_JV_TERMS = {1: 12, 2: 16, 3: 20}
-
-
 def quasilinear_diffusion_coefficient(
     harmonic_index: int,
     cyclotron_frequency: ScalarFloat,
@@ -522,19 +515,19 @@ def quasilinear_diffusion_coefficient(
     Returns:
         The quasilinear diffusion coefficient Dql.
     """
-    # With J_m(z) = (z/2)^m S_m(q), q = z^2/4 and z = k_perp rho_L = -kappa u_perp
-    # (electron helicity), the three components of Pi_n share the factor
-    # (-1)^n z^(n-1) / 2^n, An is the outer product conj(Pi) Pi^T, and
-    #   Dql = u_perp^2 |Pi . e|^2 = u_perp^2 q^(n-1) / 4 |a . e|^2,
-    #   a = (-n S_n, i (n S_n - 2 q S_{n+1}), -kappa u_par S_n).
-    # Everything is a polynomial in u_par: no square root, no 1/z, no branch. Outside
-    # the resonance circle (u_perp^2 < 0) the clamp makes Dql zero.
+    # Dql = u_perp^2 |Pi . e|^2, Pi = (-n J_{-n}(z)/z, i J_{-n}'(z), u_par/u_perp J_{-n}(z)),
+    # z = k_perp rho_L = -kappa u_perp: negative for the electron helicity, and its sign
+    # fixes the third component relative to the first two. With J_m(z) = (z/2)^m S_m(q),
+    # q = z^2/4, the components share the factor (-1)^n z^(n-1) / 2^n, so
+    #   Dql = u_perp^2 q^(n-1) / 4 |a . e|^2,
+    #   a = (-n S_n, i (n S_n - 2 q S_{n+1}), -kappa u_par S_n),
+    # a polynomial in u_par: no square root, no 1/z, no branch. Outside the resonance
+    # circle (u_perp^2 < 0) the clamp makes Dql zero.
     u_perp_sq = jnp.maximum(lorentz_factor**2 - parallel_momentum**2 - 1, 0.0)
     kappa = refractive_index_perp * frequency / cyclotron_frequency
     q = kappa**2 * u_perp_sq / 4
-    n_terms = _JV_TERMS.get(harmonic_index, 30)
-    s_n = bessel.jv_series_q(harmonic_index, q, n_terms)
-    s_n1 = bessel.jv_series_q(harmonic_index + 1, q, n_terms)
+    s_n = bessel.jv_series_q(harmonic_index, q)
+    s_n1 = bessel.jv_series_q(harmonic_index + 1, q)
     a1 = -harmonic_index * s_n
     a2 = harmonic_index * s_n - 2 * q * s_n1
     a3 = -kappa * parallel_momentum * s_n

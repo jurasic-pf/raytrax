@@ -2,6 +2,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
+import scipy.special
 from scipy.integrate import quad
 
 from raytrax.math import bessel
@@ -591,39 +592,39 @@ def test_resonance_integral_matches_quadrature_over_whole_circle(
     )
 
 
-def test_truncated_bessel_series_keeps_absorption(monkeypatch):
-    """The per-harmonic J_n term counts change alpha by < 1e-12 relative to 30 terms.
+@pytest.mark.parametrize("harmonic", [1, 2, 3, 4])
+def test_quasilinear_diffusion_matches_bessel_form(harmonic):
+    """The polynomial Dql equals u_perp^2 |Pi . e|^2 with Pi built from scipy's J_{-n}(z).
 
-    Hot second and third harmonic states reach the largest k_perp rho_L, where 8 terms
-    already miss by 5e-12."""
-    rng = np.random.default_rng(0)
-    n = 400
-    harmonic = rng.integers(2, 4, n)
-    b_mag = _FREQ / harmonic * rng.uniform(0.85, 1.15, n) / 27.99e9
-    theta = rng.uniform(0.2, np.pi - 0.2, n)
-    n_mag = rng.uniform(0.3, 1.0, n)
-    states = (
-        jnp.asarray(
-            np.stack([n_mag * np.cos(theta), n_mag * np.sin(theta), 0 * theta], 1)
-        ),
-        jnp.asarray(np.stack([b_mag, 0 * b_mag, 0 * b_mag], 1)),
-        jnp.asarray(rng.uniform(0.02, 1.0, n)),
-        jnp.asarray(np.exp(rng.uniform(np.log(10.0), np.log(50.0), n))),
+    Covers |z| = |k_perp rho_L| up to 10, beyond what hot, down-shifted resonances
+    with N_perp ~ 3 reach inside the integration window, and both signs of u_par."""
+    rng = np.random.default_rng(harmonic)
+    n_points = 200
+    u_par = rng.uniform(-1.0, 1.0, n_points)
+    u_perp = rng.uniform(1e-3, 1.0, n_points)
+    kappa = rng.uniform(0.0, 10.0, n_points)
+    e = rng.normal(size=(n_points, 3)) + 1j * rng.normal(size=(n_points, 3))
+    e /= np.linalg.norm(e, axis=1, keepdims=True)
+
+    z = -kappa * u_perp
+    jn = scipy.special.jv(-harmonic, z)
+    pi = np.stack(
+        [-harmonic * jn / z, 1j * scipy.special.jvp(-harmonic, z), u_par / u_perp * jn],
+        axis=1,
     )
+    expected = u_perp**2 * np.abs(np.sum(pi * e, axis=1)) ** 2
 
-    def alpha():
-        return jax.jit(
-            jax.vmap(
-                lambda N, B, ne, te: absorption.absorption_coefficient(
-                    N, B, ne, te, _FREQ, "X", 3
-                )
-            )
-        )(*states)
+    def polynomial_form(u_par, u_perp, kappa, e):
+        return absorption.quasilinear_diffusion_coefficient(
+            harmonic_index=harmonic,
+            cyclotron_frequency=_FREQ / kappa,
+            frequency=_FREQ,
+            refractive_index_perp=1.0,
+            lorentz_factor=jnp.sqrt(1 + u_par**2 + u_perp**2),
+            parallel_momentum=u_par,
+            polarization_vector=e,
+        )
 
-    truncated = alpha()
-    monkeypatch.setattr(absorption, "_JV_TERMS", {})
-    full = alpha()
-    significant = np.abs(full) > 1e-8 * np.max(np.abs(full))
-    np.testing.assert_allclose(
-        truncated[significant], full[significant], rtol=1e-12, atol=0
-    )
+    got = jax.vmap(polynomial_form)(*map(jnp.asarray, (u_par, u_perp, kappa, e)))
+    # Relative to the largest value: Dql has zeros where |Pi . e| vanishes.
+    np.testing.assert_allclose(got, expected, rtol=0, atol=1e-12 * np.max(expected))
